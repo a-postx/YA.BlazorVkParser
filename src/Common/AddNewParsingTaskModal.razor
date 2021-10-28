@@ -1,0 +1,1307 @@
+﻿@using AutoMapper
+@using System.ComponentModel
+@using System.Text;
+@using System.Collections.Generic
+@using System.Linq
+@using YA.WebClient.Application
+@using YA.WebClient.Application.Models.SaveModels
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Events
+@using YA.WebClient.Application.Caches
+@using YA.WebClient.Extensions
+
+@inject VkOneTimeParsingTaskModal AddTaskModal
+@inject IMapper Mapper
+@inject IThemeOptionsState ThemeOptions
+
+@implements IDisposable
+
+@inherits BaseParsingTaskModal
+
+<Modal @ref="_modal" Closing="@OnModalClosing" ShowBackdrop="true">
+    <ModalContent Centered="true" Size="ModalSize.Large" Class="@ThemeOptions.ModalContentClass">
+        <ModalHeader>
+            <ModalTitle>Новая задача парсинга</ModalTitle>
+            <CloseButton Clicked="@OnModalClose" AutoClose="true" />
+        </ModalHeader>
+        <ModalBody>
+            <ModalApiIssueAlert @ref="_modalAlert" />
+            <Validations Mode="ValidationMode.Manual" @ref="_addParsingTaskModalValidation" Model="@_addTaskModal">
+                <Tabs SelectedTab="@_addTaskModal.SourceType.ToString()" SelectedTabChanged="@OnSelectedSourcesTabChanged">
+                    <Items>
+                        <Tooltip Fade="true" Style="font-size:smaller"
+                                 Text="Ссылки на сообщества и ключевые слова"
+                                 Placement="TooltipPlacement.Top"
+                                 Multiline="true"
+                                 AlwaysActive="false">
+                            <Tab Name="@VkParsingTaskSourceType.Links.ToString()" Class="boldtext">
+                                <Icon Name="IconName.Edit" />
+                            </Tab>
+                        </Tooltip>
+                        <Tooltip Fade="true"
+                                 Text="Выполненные задачи"
+                                 Placement="TooltipPlacement.Top"
+                                 Multiline="true"
+                                 AlwaysActive="false">
+                            <Tab Name="@VkParsingTaskSourceType.Tasks.ToString()" Class="boldtext">
+                                <Icon Name="IconName.List" />
+                            </Tab>
+                        </Tooltip>
+                    </Items>
+                    <Content>
+                        <TabPanel Name="@VkParsingTaskSourceType.Links.ToString()" Class="mt-3">
+                            <Validation Validator="@ValidateSourceIdsRawInput">
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                    <FieldLabel Class="boldtext">Введите идентификаторы, ссылки на сообщества (профили) ВКонтакте или ключевые слова</FieldLabel>
+                                    <MemoEdit @bind-Text="@_addTaskModal.OptionsSmRawLinkSources" Rows="5" MaxLength="400000" Autofocus="true" Placeholder="Каждая ссылка с новой строки, не более 1000 ссылок за раз">
+                                        <Feedback>
+                                            <ValidationError Tooltip="false" />
+                                        </Feedback>
+                                    </MemoEdit>
+                                </Field>
+                            </Validation>
+                        </TabPanel>
+                        <TabPanel Name="@VkParsingTaskSourceType.Tasks.ToString()" Class="mt-3">
+                            <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                <FieldLabel Class="boldtext">Выполненные задачи</FieldLabel>
+                                <BlazoredTypeahead style="padding-left:.75rem"
+                                                   SearchMethod="GetParsingTasksAsTaskSource"
+                                                   TValue="string"
+                                                   TItem="VkQuickParsingTaskVm"
+                                                   Value="@_selectedSearchValue"
+                                                   ValueChanged="@((v) => OnTaskSearchValueChanged(v))"
+                                                   ValueExpression="@(() => _selectedSearchValue)"
+                                                   ConvertMethod="ConvertParsingTask"
+                                                   ShowDropDownOnFocus="true"
+                                                   EnableDropDown="true"
+                                                   MinimumLength="1"
+                                                   MaximumSuggestions="10"
+                                                   Debounce="500">
+                                    <SelectedTemplate Context="task">
+                                        <div style="color:#212529">
+                                            @task
+                                        </div>
+                                    </SelectedTemplate>
+                                    <ResultTemplate Context="task">
+                                        <div>
+                                            @task.Title
+                                        </div>
+                                        <div>
+                                            Объектов: @task.VkResultsCount
+                                        </div>
+                                    </ResultTemplate>
+                                    <NotFoundTemplate>
+                                        <Text Class="text-muted">
+                                            Ничего не найдено.
+                                        </Text>
+                                    </NotFoundTemplate>
+                                </BlazoredTypeahead>
+                            </Field>
+                            @if (_tasksSourcesIsLoading)
+                            {
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters" Style="padding-top:7px">
+                                    <Wave Color="black" Size="14px" />
+                                </Field>
+                            }
+                            else
+                            {
+                                <Field ColumnSize="ColumnSize.Is12">
+                                    @foreach (VkQuickParsingTaskVm item in _selectedTasks)
+                                    {
+                                        <Badge Color="Color.Primary"
+                                               Style="font-size:100%"
+                                               CloseClicked="@(() => OnTaskItemRemoved(item))">
+                                            @item.Title
+                                        </Badge>
+                                    }
+                                </Field>
+                            }
+                        </TabPanel>
+                    </Content>
+                </Tabs>
+                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                    <div style="width: 100%; line-height:24px">
+                        <div style="display: inline-block">
+                            <FieldLabel Class="boldtext">Название задачи</FieldLabel>
+                        </div>
+                        <div style="display: inline-block; float:right">
+                            <Switch Size="Size.Small" TValue="bool" @bind-Checked="@_addTaskModal.AutoNamingIsOn">
+                                <Text Style="font-size:12px">Автоименование</Text>
+                            </Switch>
+                        </div>
+                    </div>
+                    <TextEdit @bind-Text="@_addTaskModal.OptionsSmTitleRawInput" Placeholder="Введите название..." />
+                </Field>
+
+                @if (_addTaskModal.ResultTypeVisible)
+                {
+                    <Field ColumnSize="ColumnSize.Is5" Class="no-gutters">
+                        <FieldLabel Class="boldtext">Что нужно получить?</FieldLabel>
+                        <FieldBody>
+                            <RadioGroup Size="Size.None"
+                                        TValue="VkParsingTaskResultType"
+                                        CheckedValue="@_addTaskModal.ResultType"
+                                        CheckedValueChanged="@OnResultTypeChanged"
+                                        Buttons="true">
+                                <Radio @bind-Disabled="_addTaskModal.ProfileResultTypeDisabled" TValue="VkParsingTaskResultType" Value="@VkParsingTaskResultType.Profiles">Пользователи</Radio>
+                                <Radio @bind-Disabled="_addTaskModal.CommunityResultTypeDisabled" TValue="VkParsingTaskResultType" Value="@VkParsingTaskResultType.Communities">Сообщества</Radio>
+                            </RadioGroup>
+                        </FieldBody>
+                        <Field Class="no-gutters" Style="display:inline-block">
+                            <Tooltip Fade="true"
+                                     @bind-Text="@_addTaskModal.WhatToGetTooltipText"
+                                     Placement="TooltipPlacement.Right"
+                                     Multiline="true"
+                                     AlwaysActive="false">
+                                <Icon Name="IconName.QuestionCircle" Style="color:#969392" />
+                            </Tooltip>
+                        </Field>
+                    </Field>
+                }
+                @if (_addTaskModal.ProfilesResultSubTypeVisible)
+                {
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <FieldLabel Class="boldtext">Каких пользователей нужно получить?</FieldLabel>
+                        <FieldBody>
+                            <RadioGroup Size="Size.None"
+                                        TValue="VkParsingTaskResultProfilesSubType"
+                                        CheckedValue="@_addTaskModal.ProfilesResultSubType"
+                                        CheckedValueChanged="@((value) => OnProfilesResultSubTypeChanged(value))"
+                                        Buttons="true"
+                                        Style="white-space:nowrap">
+                                <Radio @bind-Disabled="_addTaskModal.ProfilesResultAllTypeDisabled" Value="@VkParsingTaskResultProfilesSubType.All">Всех</Radio>
+                                <Radio @bind-Disabled="_addTaskModal.ProfilesResultActiveTypeDisabled" Value="@VkParsingTaskResultProfilesSubType.Active">Активных</Radio>
+                                <Radio @bind-Disabled="_addTaskModal.ProfilesResultTopTypeDisabled" Value="@VkParsingTaskResultProfilesSubType.Top">Топ</Radio>
+                                <Radio @bind-Disabled="_addTaskModal.ProfilesResultGroupIntersectionTypeDisabled" Value="@VkParsingTaskResultProfilesSubType.GroupIntersection">Пересечения</Radio>
+                                <Radio @bind-Disabled="_addTaskModal.ProfilesResultFriendsTypeDisabled" Value="@VkParsingTaskResultProfilesSubType.Friends">Друзья</Radio>
+                                <Radio @bind-Disabled="_addTaskModal.ProfilesResultDetailedProfilesTypeDisabled" Value="@VkParsingTaskResultProfilesSubType.DetailedProfiles">Экспорт в CSV</Radio>
+                            </RadioGroup>
+                        </FieldBody>
+                        <Field Class="no-gutters" Style="display:inline-block">
+                            <Tooltip Fade="true"
+                                     @bind-Text="@_addTaskModal.WhatUsersToGetTooltipText"
+                                     Placement="TooltipPlacement.Right"
+                                     Multiline="true">
+                                <Icon Name="IconName.QuestionCircle" Style="color:#969392" />
+                            </Tooltip>
+                        </Field>
+                    </Field>
+                }
+                @if (_addTaskModal.CommunitiesResultSubTypeVisible)
+                {
+                    <Field ColumnSize="ColumnSize.Is8" Class="no-gutters">
+                        <FieldLabel Class="boldtext">Какие сообщества нужно получить?</FieldLabel>
+                        <FieldBody>
+                            <RadioGroup Size="Size.None"
+                                        TValue="VkParsingTaskResultCommunitiesSubType"
+                                        @bind-CheckedValue="@_addTaskModal.CommunitiesResultSubType"
+                                        Buttons="true">
+                                <Radio @bind-Disabled="_addTaskModal.CommunitiesResultTaIntersectionTypeDisabled" Value="@VkParsingTaskResultCommunitiesSubType.TaIntersection">Сообщества с ЦА</Radio>
+                                <Radio @bind-Disabled="_addTaskModal.CommunitiesResultCommSearchTypeDisabled" Value="@VkParsingTaskResultCommunitiesSubType.CommunitiesSearch">Поиск сообществ</Radio>
+                            </RadioGroup>
+                        </FieldBody>
+                        <Field Class="no-gutters" Style="display:inline-block">
+                            <Tooltip Fade="true"
+                                     @bind-Text="@_addTaskModal.WhatCommunitiesToGetTooltipText"
+                                     Placement="TooltipPlacement.Right"
+                                     Multiline="true">
+                                <Icon Name="IconName.QuestionCircle" Style="color:#969392" />
+                            </Tooltip>
+                        </Field>
+                    </Field>
+                }
+
+                @if (_addTaskModal.ProfilesResultActiveTypeVisible)
+                {
+                    <Field Horizontal="true" ColumnSize="ColumnSize.Is12" Class="no-gutters" Style="margin-bottom:0rem">
+                        <Fields ColumnSize="ColumnSize.Is12">
+                            <Field ColumnSize="ColumnSize.Is3" Class="d-inline-block align-top">
+                                <FieldLabel Class="boldtext">Активных в</FieldLabel>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultActiveSourcePosts">Посты</Check>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultActiveSourceDiscussions">Обсуждения</Check>
+                            </Field>
+                            <Field ColumnSize="ColumnSize.Is4" Class="d-inline-block">
+                                <FieldLabel Class="boldtext">Тип активности</FieldLabel>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultActiveTypeLikes">Лайки</Check>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultActiveTypeLikesInComments">Лайки в комментариях</Check>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultActiveTypeComments">Комментарии</Check>
+                                <Tooltip Fade="true" Text="Работает только если вы администратор сообщества" Placement="TooltipPlacement.Bottom" Multiline="true">
+                                    <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultActiveTypeReposts">Репосты</Check>
+                                </Tooltip>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultActiveTypePostAuthors">Авторы постов</Check>
+                            </Field>
+                            @if (_addTaskModal.ActivitySourceInvalid)
+                            {
+                                <Field Display="Display.Flex">
+                                    <Text Style="font-size:12px" Color="TextColor.Danger">Необходимо выбрать хотя бы один источник активностей.</Text>
+                                </Field>
+                            }
+                            @if (_addTaskModal.ActivityTypeInvalid)
+                            {
+                                <Field Display="Display.Flex">
+                                    <Text Style="font-size:12px" Color="TextColor.Danger">Необходимо выбрать хотя бы один тип активностей.</Text>
+                                </Field>
+                            }
+                        </Fields>
+                    </Field>
+                    <Field Horizontal="true" ColumnSize="ColumnSize.Is12" Class="no-gutters" Style="margin-bottom:0rem">
+                        <FieldLabel ColumnSize="ColumnSize.Is3" Class="boldtext">Период активности</FieldLabel>
+                        <FieldBody ColumnSize="ColumnSize.Is9">
+                            <Fields>
+                                <Validation Validator="@ValidateActivityPerodStart">
+                                    <Field ColumnSize="ColumnSize.Is6">
+                                        <Addons>
+                                            <Addon AddonType="AddonType.Start">
+                                                <AddonLabel>c</AddonLabel>
+                                            </Addon>
+                                            <Addon AddonType="AddonType.Body">
+                                                @*https://github.com/stsrki/Blazorise/issues/1811*@
+                                                @*https://github.com/stsrki/Blazorise/issues/1812*@
+                                                <DateEdit TValue="DateTime?" Date="@_activePeriodStart" DateChanged="@OnActivePeriodStartChanged" />
+                                            </Addon>
+                                        </Addons>
+                                    </Field>
+                                </Validation>
+                                <Validation Validator="@ValidateActivityPerodEnd">
+                                    <Field ColumnSize="ColumnSize.Is6">
+                                        <Addons>
+                                            <Addon AddonType="AddonType.Start">
+                                                <AddonLabel>по</AddonLabel>
+                                            </Addon>
+                                            <Addon AddonType="AddonType.Body">
+                                                @*https://github.com/stsrki/Blazorise/issues/1811*@
+                                                @*https://github.com/stsrki/Blazorise/issues/1812*@
+                                                <DateEdit TValue="DateTime?" Date="@_activePeriodEnd" DateChanged="@OnActivePeriodEndChanged" />
+                                            </Addon>
+                                        </Addons>
+                                    </Field>
+                                </Validation>
+                            </Fields>
+                        </FieldBody>
+                    </Field>
+                    <Validation>
+                        <Field Horizontal="true" ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                            <FieldLabel ColumnSize="ColumnSize.Is3" Class="boldtext">Число активностей</FieldLabel>
+                            <FieldBody ColumnSize="ColumnSize.Is9">
+                                <Addons>
+                                    <Addon AddonType="AddonType.Start">
+                                        <AddonLabel>от</AddonLabel>
+                                    </Addon>
+                                    <Addon AddonType="AddonType.Body">
+                                        <NumericEdit Min="1" Max="@int.MaxValue" Step="1" TValue="int?" @bind-Value="@_addTaskModal.ProfilesResultActiveActivityCountFrom">
+                                            <Feedback>
+                                                <ValidationError Tooltip="false" />
+                                            </Feedback>
+                                        </NumericEdit>
+                                    </Addon>
+                                </Addons>
+                            </FieldBody>
+                        </Field>
+                    </Validation>
+                    <Field Horizontal="true" ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultActiveLimitWallPostsCount">Ограничить количество постов для сбора 1000 шт.</Check>
+                    </Field>
+                }
+
+                @if (_addTaskModal.ProfilesResultTopTypeVisible)
+                {
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <FieldLabel Class="boldtext">Анализировать пользовательские сообщества</FieldLabel>
+                        <RadioGroup Orientation="Orientation.Horizontal"
+                                    Size="Size.Small"
+                                    TValue="VkParsingTaskResultProfileTopType"
+                                    @bind-CheckedValue="@_addTaskModal.ProfilesResultTopType"
+                                    Buttons="false">
+                            <Radio Value="@VkParsingTaskResultProfileTopType.Top3">Топ-3</Radio>
+                            <Radio Value="@VkParsingTaskResultProfileTopType.Top5">Топ-5</Radio>
+                            <Radio Value="@VkParsingTaskResultProfileTopType.Top10">Топ-10</Radio>
+                            <Radio Value="@VkParsingTaskResultProfileTopType.Top20">Топ-20</Radio>
+                            <Radio Value="@VkParsingTaskResultProfileTopType.Top30">Топ-30</Radio>
+                        </RadioGroup>
+                    </Field>
+                    <Validation>
+                        <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters">
+                            <FieldLabel ColumnSize="ColumnSize.Is7" Class="boldtext">Число сообществ, которые у пользователя в ТОП</FieldLabel>
+                            <FieldBody ColumnSize="ColumnSize.Is5">
+                                <NumericEdit Min="1" Max="@int.MaxValue" Step="1" TValue="int?" @bind-Value="@_addTaskModal.TopCommunitiesCount">
+                                    <Feedback>
+                                        <ValidationError Tooltip="false" />
+                                    </Feedback>
+                                </NumericEdit>
+                            </FieldBody>
+                        </Field>
+                    </Validation>
+                }
+
+                @if (_addTaskModal.ProfilesResultGroupIntersectionTypeVisible)
+                {
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        @if (_addTaskModal.ValidatedForm.SourcesObjectType == VkParsingTaskSourcesObjectType.Group)
+                        {
+                            <FieldLabel Class="boldtext">Число общих сообществ у участников</FieldLabel>
+                        }
+                        else
+                        {
+                            <FieldLabel Class="boldtext">Число общих друзей у пользователей</FieldLabel>
+                        }
+                        <Fields>
+                            <Validation>
+                                <Field ColumnSize="ColumnSize.Is6">
+                                    <Addons>
+                                        <Addon AddonType="AddonType.Start">
+                                            <AddonLabel>от</AddonLabel>
+                                        </Addon>
+                                        <Addon AddonType="AddonType.Body">
+                                            <NumericEdit Min="1" Max="@int.MaxValue" Step="1" TValue="int?" @bind-Value="@_addTaskModal.ProfilesResultGiCountFrom">
+                                                <Feedback>
+                                                    <ValidationError Tooltip="false" />
+                                                </Feedback>
+                                            </NumericEdit>
+                                        </Addon>
+                                    </Addons>
+                                </Field>
+                            </Validation>
+                            <Validation>
+                                <Field ColumnSize="ColumnSize.Is6">
+                                    <Addons>
+                                        <Addon AddonType="AddonType.Start">
+                                            <AddonLabel>до</AddonLabel>
+                                        </Addon>
+                                        <Addon AddonType="AddonType.Body">
+                                            <NumericEdit EnableStep="false" Min="1" Max="@int.MaxValue" Step="1" TValue="int?" @bind-Value="@_addTaskModal.ProfilesResultGiCountTo">
+                                                <Feedback>
+                                                    <ValidationError Tooltip="false" />
+                                                </Feedback>
+                                            </NumericEdit>
+                                        </Addon>
+                                    </Addons>
+                                </Field>
+                            </Validation>
+                        </Fields>
+                    </Field>
+                }
+
+                @if (_addTaskModal.ProfilesResultFriendsTypeVisible)
+                {
+                    <Field Horizontal="true" ColumnSize="ColumnSize.Is12" Class="no-gutters" Style="margin-bottom:0rem">
+                        <Fields>
+                            <Field ColumnSize="ColumnSize.Is5" Class="d-inline-block align-top" Style="max-width:100%; flex:0 0 100%">
+                                <FieldLabel Class="boldtext">Тип друзей</FieldLabel>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultFriendsGetFriends">Друзья</Check>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultFriendsGetFollowers">Подписчики</Check>
+                                <Check TValue="bool?" @bind-Checked="_addTaskModal.ProfilesResultFriendsGetPeopleSubscriptions">На кого подписан</Check>
+                            </Field>
+                            @if (_addTaskModal.FriendsTypeInvalid)
+                            {
+                                <Field Display="Display.Flex">
+                                    <Text Style="font-size:12px" Color="TextColor.Danger">Необходимо выбрать хотя бы один тип друзей.</Text>
+                                </Field>
+                            }
+                        </Fields>
+                    </Field>
+                }
+
+                @if (_addTaskModal.CommunitiesResultTaIntersectionTypeVisible)
+                {
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <FieldLabel Class="boldtext">Анализировать пользовательские сообщества</FieldLabel>
+                        <RadioGroup Orientation="Orientation.Horizontal"
+                                    Size="Size.Small"
+                                    TValue="VkParsingTaskResultCommunitiesTopType"
+                                    @bind-CheckedValue="@_addTaskModal.CommunitiesResultTaIntersectionTopType"
+                                    Buttons="false">
+                            <Radio Value="@VkParsingTaskResultCommunitiesTopType.Top3">Топ-3</Radio>
+                            <Radio Value="@VkParsingTaskResultCommunitiesTopType.Top5">Топ-5</Radio>
+                            <Radio Value="@VkParsingTaskResultCommunitiesTopType.Top10">Топ-10</Radio>
+                            <Radio Value="@VkParsingTaskResultCommunitiesTopType.Top15">Топ-15</Radio>
+                            <Radio Value="@VkParsingTaskResultCommunitiesTopType.All">Все</Radio>
+                        </RadioGroup>
+                    </Field>
+                    <Validation>
+                        <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters">
+                            <FieldLabel ColumnSize="ColumnSize.Is7" Class="boldtext">Сколько нужно сообществ?</FieldLabel>
+                            <FieldBody ColumnSize="ColumnSize.Is5">
+                                <NumericEdit Min="1" Max="10000" Step="1" TValue="int?" @bind-Value="@_addTaskModal.CommunitiesResultTaIntersectionCommunitiesCount">
+                                    <Feedback>
+                                        <ValidationError Tooltip="false" />
+                                    </Feedback>
+                                </NumericEdit>
+                            </FieldBody>
+                        </Field>
+                    </Validation>
+                }
+
+                @if (_addTaskModal.CommunitiesResultCommSearchTypeVisible)
+                {
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters mb-0">
+                        <Fields>
+                            <Field ColumnSize="ColumnSize.Is6">
+                                <FieldLabel Class="boldtext">Тип сообществ</FieldLabel>
+                                <FieldBody ColumnSize="ColumnSize.Is6">
+                                    <Select TValue="VkParsingTaskCommunitySearchCommType" @bind-SelectedValue="@_addTaskModal.CommunitiesResultCommSearchGroupType">
+                                        <SelectItem Value="VkParsingTaskCommunitySearchCommType.Unknown"><Text></Text></SelectItem>
+                                        <SelectItem Value="VkParsingTaskCommunitySearchCommType.Group"><Text>Группы</Text></SelectItem>
+                                        <SelectItem Value="VkParsingTaskCommunitySearchCommType.Page"><Text>Паблики</Text></SelectItem>
+                                        <SelectItem Value="VkParsingTaskCommunitySearchCommType.Event"><Text>Мероприятия</Text></SelectItem>
+                                        <SelectItem Value="VkParsingTaskCommunitySearchCommType.FutureEvent"><Text>Предстоящие мероприятия</Text></SelectItem>
+                                    </Select>
+                                </FieldBody>
+                            </Field>
+                            @*<Field ColumnSize="ColumnSize.Is6">
+                        <FieldLabel Class="boldtext">Сортировка</FieldLabel>
+                        <FieldBody ColumnSize="ColumnSize.Is6">
+                            <Select TValue="VkParsingTaskCommunitySearchResultSort" @bind-SelectedValue="@_addTaskModal.CommunitiesResultCommSearchResultSort">
+                                <SelectItem Value="VkParsingTaskCommunitySearchResultSort.Unknown"><Text></Text></SelectItem>
+                                <SelectItem Value="VkParsingTaskCommunitySearchResultSort.Default"><Text>По-умолчанию</Text></SelectItem>
+                                <SelectItem Value="VkParsingTaskCommunitySearchResultSort.GrowthSpeed"><Text>По скорости роста</Text></SelectItem>
+                                <SelectItem Value="VkParsingTaskCommunitySearchResultSort.DailyVisitors"><Text>По дневной посещаемости</Text></SelectItem>
+                                <SelectItem Value="VkParsingTaskCommunitySearchResultSort.LikesCount"><Text>По количеству лайков</Text></SelectItem>
+                                <SelectItem Value="VkParsingTaskCommunitySearchResultSort.CommentsCount"><Text>По количеству комментариев</Text></SelectItem>
+                                <SelectItem Value="VkParsingTaskCommunitySearchResultSort.DiscussionsCount"><Text>По количеству записей в обсуждениях</Text></SelectItem>
+                            </Select>
+                        </FieldBody>
+                    </Field>*@
+                        </Fields>
+                    </Field>
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters mb-0">
+                        <Fields>
+                            <Field ColumnSize="ColumnSize.Is6">
+                                <FieldLabel Class="boldtext">Участников от</FieldLabel>
+                                <FieldBody ColumnSize="ColumnSize.Is6">
+                                    <NumericEdit TValue="int?" @bind-Value="@_addTaskModal.CommunitiesResultCommSearchMembersMin" />
+                                </FieldBody>
+                            </Field>
+                            <Field ColumnSize="ColumnSize.Is6">
+                                <FieldLabel Class="boldtext">Участников до</FieldLabel>
+                                <FieldBody ColumnSize="ColumnSize.Is6">
+                                    <NumericEdit TValue="int?" @bind-Value="@_addTaskModal.CommunitiesResultCommSearchMembersMax" />
+                                </FieldBody>
+                            </Field>
+                        </Fields>
+                    </Field>
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters mb-0">
+                        <Fields>
+                            <Field ColumnSize="ColumnSize.Is6">
+                                <Check TValue="bool" @bind-Checked="_addTaskModal.CommunitiesResultCommSearchPhraseSearch">Точное вхождение поисковой фразы</Check>
+                            </Field>
+                            <Field ColumnSize="ColumnSize.Is6">
+                                <Check TValue="bool" @bind-Checked="_addTaskModal.CommunitiesResultCommSearchVerified">Только верифицированные сообщества</Check>
+                            </Field>
+                        </Fields>
+                        <Fields>
+                            <Field ColumnSize="ColumnSize.Is6">
+                                <Check TValue="bool" @bind-Checked="_addTaskModal.CommunitiesResultCommSearchTrending">Только сообщества c Прометеем</Check>
+                            </Field>
+                            <Field ColumnSize="ColumnSize.Is6">
+                                <Check TValue="bool" @bind-Checked="_addTaskModal.CommunitiesResultCommSearchMarketOnly">Только сообщества с товарами</Check>
+                            </Field>
+                        </Fields>
+                    </Field>
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters mb-0">
+                        <Fields>
+                            <Field ColumnSize="ColumnSize.Is12">
+                                <FieldLabel Class="boldtext">Каких ключевых слов не должно быть</FieldLabel>
+                                <MemoEdit @bind-Text="@_addTaskModal.CommunitiesResultCommSearchMinusWords" Rows="2" MaxLength="6000"
+                                          Autofocus="false" Placeholder="Введите минус-слова через запятую (например: продаю,дёшево)" />
+                            </Field>
+                        </Fields>
+                    </Field>
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <Fields>
+                            <Field ColumnSize="ColumnSize.Is12">
+                                <FieldLabel Class="boldtext">Где искать?</FieldLabel>
+                                <FieldBody ColumnSize="ColumnSize.Is12">
+                                    <Select TValue="VkParsingTaskCommunitySearchSearchType" @bind-SelectedValue="@_addTaskModal.CommunitiesResultCommSearchSearchType">
+                                        <SelectItem Value="VkParsingTaskCommunitySearchSearchType.Internal"><Text>В Venando</Text></SelectItem>
+                                        <SelectItem Value="VkParsingTaskCommunitySearchSearchType.Vkontakte"><Text>Во ВКонтакте</Text></SelectItem>
+                                    </Select>
+                                </FieldBody>
+                            </Field>
+                        </Fields>
+                    </Field>
+                }
+
+                @if (_addTaskModal.FilterSectionVisible)
+                {
+                    <Divider Style="margin-top:1.5rem" DividerType="DividerType.TextContent" Text="Фильтрация" />
+
+                    <Field ColumnSize="ColumnSize.Is12" Class="boldtext">
+                        <Switch TValue="bool"
+                                Checked="_addTaskModal.FilterEnabled"
+                                Color="Color.Primary"
+                                CheckedChanged="@OnFilterEnabledChanged">
+                            <Text>Фильтровать результаты</Text>
+                        </Switch>
+                    </Field>
+
+                    @if (_addTaskModal.CommunityFilterOptionsVisible)
+                    {
+                        <Field Horizontal="true" ColumnSize="ColumnSize.Is12" Class="no-gutters" Style="margin-bottom:0rem">
+                            <FieldLabel ColumnSize="ColumnSize.Is4">
+                                Дата последнего поста
+                                @*<Check TValue="bool" Checked="true" Disabled="true">По дате последнего поста</Check>*@
+                            </FieldLabel>
+                            <FieldBody ColumnSize="ColumnSize.Is8">
+                                <Fields>
+                                    <Validation Validator="@ValidateCommunityWallPostPeriodStart">
+                                        <Field ColumnSize="ColumnSize.Is5">
+                                            <Addons>
+                                                <Addon AddonType="AddonType.Start">
+                                                    <AddonLabel>c</AddonLabel>
+                                                </Addon>
+                                                <Addon AddonType="AddonType.Body">
+                                                    @*https://github.com/stsrki/Blazorise/issues/1811*@
+                                                    @*https://github.com/stsrki/Blazorise/issues/1812*@
+                                                    <DateEdit TValue="DateTime?" Date="@_commLastWallPostPeriodStart" DateChanged="@OnLastCommWallPostPeriodStartChanged" />
+                                                </Addon>
+                                            </Addons>
+                                        </Field>
+                                    </Validation>
+                                    <Validation Validator="@ValidateCommunityWallPostPeriodEnd">
+                                        <Field ColumnSize="ColumnSize.Is5">
+                                            <Addons>
+                                                <Addon AddonType="AddonType.Start">
+                                                    <AddonLabel>по</AddonLabel>
+                                                </Addon>
+                                                <Addon AddonType="AddonType.Body">
+                                                    @*https://github.com/stsrki/Blazorise/issues/1811*@
+                                                    @*https://github.com/stsrki/Blazorise/issues/1812*@
+                                                    <DateEdit TValue="DateTime?" Date="@_commLastWallPostPeriodEnd" DateChanged="@OnLastCommWallPostPeriodEndChanged" />
+                                                </Addon>
+                                            </Addons>
+                                        </Field>
+                                    </Validation>
+                                    <Field ColumnSize="ColumnSize.Is12">
+                                        <Icon Name="IconName.ExclamationCircle" Style="color:#ffa200" /> Фильтрация по постам сильно замедляет выполнение задачи и на неё существует суточный лимит
+                                    </Field>
+                                </Fields>
+                            </FieldBody>
+                        </Field>
+                    }
+                }
+
+                @if (_addTaskModal.AutomationSectionVisible)
+                {
+                    <Divider Style="margin-top:1.5rem" DividerType="DividerType.TextContent" Text="Автоматизация" />
+
+                    <Field ColumnSize="ColumnSize.Is12" Class="boldtext">
+                        <Switch TValue="bool"
+                                Disabled="@(CurrentPeriodicParsingTasksCount is null ||
+                                            CurrentPeriodicParsingTasksCount >= _currentPricingTier?.MaxVkPeriodicParsingTasks)"
+                                @bind-Checked="_addTaskModal.CreatePeriodicTask"
+                                Color="Color.Primary">
+                            <Text>Создать после выполнения периодическое задание</Text>
+                        </Switch>
+                    </Field>
+
+                    @if (CurrentPeriodicParsingTasksCount >= _currentPricingTier?.MaxVkPeriodicParsingTasks)
+                    {
+                        <Field ColumnSize="ColumnSize.Is12" Class="text-muted">
+                            <Icon Name="IconName.ExclamationCircle" Style="color:#ffa200" /> Достигнут предел создания периодических задач на вашем тарифном плане.
+                        </Field>
+                    }
+
+                    @if (_addTaskModal.PeriodicTaskOptionsVisible)
+                    {
+                        <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters">
+                            <FieldLabel ColumnSize="ColumnSize.Is4">Периодичность запуска задачи</FieldLabel>
+                            <FieldBody ColumnSize="ColumnSize.Is8">
+                                @* нужно предупреждение, что при сборе активных имеется дневной лимит и период нужно ставить большой *@
+                                <Select TValue="VkPeriodicParsingTaskRate?"
+                                        @bind-Disabled="@_addTaskModal.PeriodicTaskOptionsDisabled"
+                                        @bind-SelectedValue="@_addTaskModal.PeriodicTaskExecutionRate">
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.HalfHour"><Text>@VkPeriodicParsingTaskRate.HalfHour.GetUiName()</Text></SelectItem>
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.Hour"><Text>@VkPeriodicParsingTaskRate.Hour.GetUiName()</Text></SelectItem>
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.TwoHours"><Text>@VkPeriodicParsingTaskRate.TwoHours.GetUiName()</Text></SelectItem>
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.ThreeHours"><Text>@VkPeriodicParsingTaskRate.ThreeHours.GetUiName()</Text></SelectItem>
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.SixHours"><Text>@VkPeriodicParsingTaskRate.SixHours.GetUiName()</Text></SelectItem>
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.TwelveHours"><Text>@VkPeriodicParsingTaskRate.TwelveHours.GetUiName()</Text></SelectItem>
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.TwentyFourHours"><Text>@VkPeriodicParsingTaskRate.TwentyFourHours.GetUiName()</Text></SelectItem>
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.FortyEightHours"><Text>@VkPeriodicParsingTaskRate.FortyEightHours.GetUiName()</Text></SelectItem>
+                                    <SelectItem Value="VkPeriodicParsingTaskRate.Nightly"><Text>@VkPeriodicParsingTaskRate.Nightly.GetUiName()</Text></SelectItem>
+                                </Select>
+                            </FieldBody>
+                        </Field>
+                    }
+                }
+
+                @if (_addTaskModal.VkAdsExportSectionVisible)
+                {
+                    @if (_addTaskModal.ResultType == VkParsingTaskResultType.Profiles)
+                    {
+                        <Divider Style="margin-top:1.5rem" DividerType="DividerType.TextContent" Text="Экспорт в рекламный кабинет" />
+
+                        <Field ColumnSize="ColumnSize.Is12" Class="boldtext">
+                            <Switch TValue="bool"
+                                    @bind-Checked="_addTaskModal.ExportToVkAds"
+                                    Color="Color.Primary">
+                                <Text>Выгрузить результат в рекламный кабинет ВКонтакте</Text>
+                            </Switch>
+                        </Field>
+
+                        @if (_addTaskModal.VkAdsAccountSelectorVisible)
+                        {
+                            <Validation Validator="@ValidateVkAdsAccountOption">
+                                <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters" Style="margin-bottom:0.5rem">
+                                    <FieldLabel ColumnSize="ColumnSize.Is6">Рекламный кабинет</FieldLabel>
+                                    <FieldBody ColumnSize="ColumnSize.Is6">
+                                        <Select TValue="long"
+                                                SelectedValue="@_addTaskModal.VkAdsAccountId"
+                                                SelectedValueChanged="@_addTaskModal.OnVkAdsAccountChangedAsync"
+                                                Disabled="@(_addTaskModal.AvailableVkAdsAccounts == null)">
+                                            @if (_addTaskModal.AvailableVkAdsAccounts == null)
+                                            {
+                                                <SelectItem TValue="long" Value="0"><Text>загрузка...</Text></SelectItem>
+                                            }
+                                            else
+                                            {
+                                                <SelectItem Value="0"><Text></Text></SelectItem>
+                                                @foreach (VkAdsAccountVm account in _addTaskModal.AvailableVkAdsAccounts)
+                                                {
+                                                    <SelectItem Value="@account.Id"><Text>@account.Name</Text></SelectItem>
+                                                }
+                                            }
+                                        </Select>
+                                    </FieldBody>
+                                </Field>
+                            </Validation>
+
+                            @if (_addTaskModal.VkAdsTargetGroupsSelectorVisible)
+                            {
+                                <Validation Validator="@ValidateVkAdsTargetGroupOption">
+                                    <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters" Style="margin-bottom:0.5rem">
+                                        <FieldLabel ColumnSize="ColumnSize.Is6">Группа аудитории</FieldLabel>
+                                        <FieldBody ColumnSize="ColumnSize.Is6">
+                                            <Select TValue="long"
+                                                    SelectedValue="@_addTaskModal.VkAdsTargetGroupId"
+                                                    SelectedValueChanged="@_addTaskModal.OnVkAdsTargetGroupChanged"
+                                                    Disabled="@(_addTaskModal.AvailableVkAdsTargetGroups == null)">
+                                                @if (_addTaskModal.AvailableVkAdsTargetGroups == null)
+                                                {
+                                                    <SelectItem TValue="long" Value="0"><Text>загрузка...</Text></SelectItem>
+                                                }
+                                                else
+                                                {
+                                                    <SelectItem TValue="long" Value="0"><Text></Text></SelectItem>
+                                                    <SelectItem TValue="long" Value="-1" Style="color:#0073BB"><Text>Создать новую</Text></SelectItem>
+                                                    @foreach (VkAdsTargetGroupVm targetGroup in _addTaskModal.AvailableVkAdsTargetGroups)
+                                                    {
+                                                        <SelectItem TValue="long" Value="@targetGroup.Id"><Text>@targetGroup.Name</Text></SelectItem>
+                                                    }
+                                                }
+                                            </Select>
+                                        </FieldBody>
+                                    </Field>
+                                </Validation>
+                            }
+                            @if (_addTaskModal.NewTargetGroupNameSelectorVisible)
+                            {
+                                <Validation>
+                                    <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters" Style="margin-bottom:0.5rem">
+                                        <FieldLabel ColumnSize="ColumnSize.Is6">Имя новой группы аудитории</FieldLabel>
+                                        <FieldBody ColumnSize="ColumnSize.Is6">
+                                            <TextEdit Display="Display.InlineBlock" @bind-Text="@_addTaskModal.NewTargetGroupName">
+                                                <Feedback>
+                                                    <ValidationError Tooltip="false" />
+                                                </Feedback>
+                                            </TextEdit>
+                                        </FieldBody>
+                                    </Field>
+                                </Validation>
+                            }
+                        }
+                    }
+                }
+            </Validations>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Secondary" Clicked="OnModalClose">Закрыть</Button>
+            <Button Loading="@_submitButtonIsLoading"
+                    Disabled="@_addTaskModal.SubmitButtonDisabled"
+                    Color="Color.Primary"
+                    Clicked="@OnAddVkParsingTask"> Добавить</Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+@code
+{
+    [Parameter]
+    public EventCallback<string> OnTaskCreatedCallback { get; set; }
+
+    [Parameter]
+    public ICollection<string> LinkSources { get; set; }
+
+    [Parameter]
+    public long? CurrentPeriodicParsingTasksCount { get; set; }
+
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private Modal _modal;
+    private VkOneTimeParsingTaskModal _addTaskModal;
+
+    private string _selectedSearchValue { get; set; }
+
+    private Validations _addParsingTaskModalValidation;
+
+    private bool _submitButtonIsLoading = false;
+    private bool _tasksSourcesIsLoading = false;
+
+    //элемент поля Удалить не работает, если опираемся на свойство компонента Date, поэтому дублируем
+    private DateTime? _activePeriodStart;
+    private DateTime? _activePeriodEnd;
+
+    private DateTime? _commLastWallPostPeriodStart;
+    private DateTime? _commLastWallPostPeriodEnd;
+
+    private bool _canBeClosed;
+
+    private EventHandler _modalPropertyChanged;
+    private EventHandler<ExportToVkAdsChangedEventArgs> _exportToVkChanged;
+
+    private PricingTierVm _currentPricingTier;
+
+    
+
+    protected override void OnInitialized()
+    {
+        _addTaskModal = AddTaskModal;
+        _currentPricingTier = UserManager.GetTenant()?.PricingTier;
+
+        _modalPropertyChanged = async (s, args) => await HandleModalChangedTimerCallback();
+        _addTaskModal.PropertyChanged += _modalPropertyChanged;
+
+        _exportToVkChanged = async (s, args) => await OnExportToVkAdsChangedAsync(args);
+        _addTaskModal.ExportToVkAdsChanged += _exportToVkChanged;
+
+        base.OnInitialized();
+    }
+
+    public void Show()
+    {
+        _addTaskModal.SetDefaultLinksSourceOptions();
+
+        _activePeriodStart = _addTaskModal.ProfilesResultActivePeriodStart;
+        _activePeriodEnd = _addTaskModal.ProfilesResultActivePeriodEnd;
+        _commLastWallPostPeriodStart = _addTaskModal.LastCommWallPostPeriodStart;
+        _commLastWallPostPeriodEnd = _addTaskModal.LastCommWallPostPeriodEnd;
+
+        if (LinkSources != null && LinkSources.Count > 0)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            foreach (string source in LinkSources)
+            {
+                sb.Append(source + Environment.NewLine);
+            }
+
+            string rawLinkSources = sb.ToString();
+
+            _addTaskModal.OptionsSmRawLinkSources = rawLinkSources;
+        }
+
+        _modalAlert.Hide();
+
+        StateHasChanged();
+
+        _addParsingTaskModalValidation.ClearAll();
+        _modal.Show();
+    }
+
+    public void ShowWithModel(VkOneTimeParsingTaskVm parsingTaskVm)
+    {
+        _addTaskModal.LoadModel(parsingTaskVm);
+
+        _activePeriodStart = _addTaskModal.ProfilesResultActivePeriodStart;
+        _activePeriodEnd = _addTaskModal.ProfilesResultActivePeriodEnd;
+        _commLastWallPostPeriodStart = _addTaskModal.LastCommWallPostPeriodStart;
+        _commLastWallPostPeriodEnd = _addTaskModal.LastCommWallPostPeriodEnd;
+
+        _addTaskModal.OptionsEnabled = true;
+
+        _addTaskModal.SetTaskOptionsAvailabilityBasedOnLoadedModelForEdit();
+
+        _addTaskModal.UpdateOptionsVisibility();
+        _addTaskModal.UpdateTooltipTexts();
+
+        if (CurrentPeriodicParsingTasksCount is null || CurrentPeriodicParsingTasksCount >= _currentPricingTier?.MaxVkPeriodicParsingTasks)
+        {
+            _addTaskModal.SetPeriodicParsingTaskOptionsDisabled(true);
+            StateHasChanged();
+        }
+
+        _modalAlert.Hide();
+
+        _addParsingTaskModalValidation.ClearAll();
+        _modal.Show();
+    }
+
+    public void ShowWithTaskSource(VkOneTimeParsingTaskVm sourceParsingTaskVm)
+    {
+        _addTaskModal.SetDefaultTasksSourceOptions();
+
+        if (sourceParsingTaskVm != null)
+        {
+            VkQuickParsingTaskVm sourceQuickVm = Mapper.Map<VkQuickParsingTaskVm>(sourceParsingTaskVm);
+
+            _selectedTasks.Add(sourceQuickVm);
+            _addTaskModal.AddTasksAsSources(_selectedTasks, false);
+        }
+
+        _activePeriodStart = _addTaskModal.ProfilesResultActivePeriodStart;
+        _activePeriodEnd = _addTaskModal.ProfilesResultActivePeriodEnd;
+        _commLastWallPostPeriodStart = _addTaskModal.LastCommWallPostPeriodStart;
+        _commLastWallPostPeriodEnd = _addTaskModal.LastCommWallPostPeriodEnd;
+
+        _addTaskModal.OptionsEnabled = true;
+
+        _addTaskModal.UpdateOptionsVisibility();
+
+        _addParsingTaskModalValidation.ClearAll();
+        _modal.Show();
+    }
+
+    public void ResetModalCheckingTimer()
+    {
+        //используем в куче с другими запросами, благодаря задержке размазываем нагрузку на сервер
+        _addTaskModal.ResetCheckingTimer(200);
+    }
+
+    private void OnModalClosing(CancelEventArgs e)
+    {
+        // just set Cancel to true to prevent modal from closing
+        if (_canBeClosed)
+        {
+            LinkSources?.Clear();
+            _modalAlert.Hide();
+
+            _addTaskModal.Reset();
+            ResetModalHelpingData();
+        }
+        else
+        {
+            e.Cancel = true;
+        }
+    }
+
+    private void OnModalClose()
+    {
+        _canBeClosed = true;
+        _modal.Hide();
+        _canBeClosed = false;
+    }
+
+    private void ResetModalHelpingData()
+    {
+        _commLastWallPostPeriodStart = null;
+        _commLastWallPostPeriodEnd = null;
+
+        ResetTaskSourceTabsHelpingData();
+    }
+
+    private void ValidateSourceIdsRawInput(ValidatorEventArgs e)
+    {
+        string rawInput = Convert.ToString(e.Value);
+
+        if (string.IsNullOrEmpty(rawInput))
+        {
+            e.Status = ValidationStatus.None;
+        }
+        else if (string.IsNullOrWhiteSpace(rawInput))
+        {
+            e.Status = ValidationStatus.Error;
+            e.ErrorText = "Введите группы, профили или ключевые слова";
+        }
+        else
+        {
+            bool valid = true;
+
+            if (_addTaskModal.SourcesCountInvalid)
+            {
+                valid = false;
+                e.ErrorText = "Введите не более 1000 групп, профилей или ключевых фраз";
+            }
+            else if (_addTaskModal.ValidatedForm.SourcesObjectType == VkParsingTaskSourcesObjectType.Unknown)
+            {
+                valid = false;
+                e.ErrorText = "Введите группы, профили или ключевые слова";
+            }
+
+            e.Status = valid ? ValidationStatus.Success : ValidationStatus.Error;
+        }
+    }
+
+    private void ValidateActivityPerodStart(ValidatorEventArgs e)
+    {
+        //браузер допускает года вроде 20060, но конвертация забирает только 4 цифры, поэтому возможны эффекты
+        //https://github.com/stsrki/Blazorise/issues/1812
+        DateTime rawPeriodStart = Convert.ToDateTime(e.Value);
+
+        e.Status = rawPeriodStart > DateTime.MinValue ? ValidationStatus.Success : ValidationStatus.Error;
+    }
+
+    private void ValidateActivityPerodEnd(ValidatorEventArgs e)
+    {
+        //браузер допускает года вроде 20060, но конвертация забирает только 4 цифры, поэтому возможны эффекты
+        //https://github.com/stsrki/Blazorise/issues/1812
+        DateTime rawPeriodEnd = Convert.ToDateTime(e.Value);
+
+        e.Status = rawPeriodEnd > DateTime.MinValue ? ValidationStatus.Success : ValidationStatus.Error;
+    }
+
+    private void ValidateVkAdsAccountOption(ValidatorEventArgs e)
+    {
+        long value = Convert.ToInt64(e.Value);
+
+        if (_addTaskModal.ExportToVkAds)
+        {
+            e.Status = (value != 0) ? ValidationStatus.Success : ValidationStatus.Error;
+        }
+        else
+        {
+            e.Status = ValidationStatus.None;
+        }
+    }
+
+    private void ValidateVkAdsTargetGroupOption(ValidatorEventArgs e)
+    {
+        long value = Convert.ToInt64(e.Value);
+
+        if (_addTaskModal.ExportToVkAds && _addTaskModal.VkAdsAccountId != 0)
+        {
+            e.Status = (value != 0) ? ValidationStatus.Success : ValidationStatus.Error;
+        }
+        else
+        {
+            e.Status = ValidationStatus.None;
+        }
+    }
+
+    private void ValidateCommunityWallPostPeriodStart(ValidatorEventArgs e)
+    {
+        //браузер допускает года вроде 20060, но конвертация забирает только 4 цифры, поэтому возможны эффекты
+        //https://github.com/stsrki/Blazorise/issues/1812
+        DateTime rawPeriodStart = Convert.ToDateTime(e.Value);
+
+        e.Status = rawPeriodStart > DateTime.MinValue ? ValidationStatus.Success : ValidationStatus.Error;
+    }
+
+    private void ValidateCommunityWallPostPeriodEnd(ValidatorEventArgs e)
+    {
+        //браузер допускает года вроде 20060, но конвертация забирает только 4 цифры, поэтому возможны эффекты
+        //https://github.com/stsrki/Blazorise/issues/1812
+        DateTime rawPeriodEnd = Convert.ToDateTime(e.Value);
+
+        e.Status = rawPeriodEnd > DateTime.MinValue ? ValidationStatus.Success : ValidationStatus.Error;
+    }
+
+    private async Task OnExportToVkAdsChangedAsync(ExportToVkAdsChangedEventArgs args)
+    {
+        await _addTaskModal.OnVkAdsExportChangedAsync(args.Value);
+
+        StateHasChanged();
+    }
+
+    //технические поля для даты активностей нужно обновлять, иначе пользователю видно минимальное значение
+    //если решить проблему, то методы диалога можно обратно прятать
+    private void OnProfilesResultSubTypeChanged(VkParsingTaskResultProfilesSubType newValue)
+    {
+        _addTaskModal.ProfilesResultSubType = newValue;
+        _addTaskModal.UpdateOptionValuesOnProfilesResultSubTypeChange(newValue);
+
+        if (newValue == VkParsingTaskResultProfilesSubType.Active)
+        {
+            _activePeriodStart = DateTime.Now.AddMonths(-1);
+            _activePeriodEnd = DateTime.Now;
+        }
+
+        _addTaskModal.UpdateOptionsVisibilityAndResetTimer();
+    }
+
+    private void OnFilterEnabledChanged(bool value)
+    {
+        _addTaskModal.FilterEnabled = value;
+
+        if (_commLastWallPostPeriodStart == null || _commLastWallPostPeriodStart == DateTime.MinValue)
+        {
+            _commLastWallPostPeriodStart = DateTime.Now.AddMonths(-1);
+        }
+
+        if (_commLastWallPostPeriodEnd == null || _commLastWallPostPeriodEnd == DateTime.MinValue)
+        {
+            _commLastWallPostPeriodEnd = DateTime.Now;
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnResultTypeChanged(VkParsingTaskResultType newValue)
+    {
+        _addTaskModal.ResultType = newValue;
+
+        if (newValue == VkParsingTaskResultType.Profiles)
+        {
+            _addTaskModal.FilterEnabled = false;
+
+            _activePeriodStart = _addTaskModal.ProfilesResultActivePeriodStart;
+            _activePeriodEnd = _addTaskModal.ProfilesResultActivePeriodEnd;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task HandleModalChangedTimerCallback()
+    {
+        _submitButtonIsLoading = true;
+        StateHasChanged();
+
+        // валидаторы блейзорайс не учитывают все настройки, надо объединять с кастомными
+        bool sourcesValid = _addTaskModal.ValidateSources();
+
+        if (sourcesValid)
+        {
+            bool remoteValid = await _addTaskModal.ValidateRemotelyAsync();
+
+            if (remoteValid)
+            {
+                _addTaskModal.OptionsEnabled = true;
+
+                _addTaskModal.UpdateTaskOptionsFromValidatedFormAndSetAvailability();
+                _addTaskModal.UpdateOptionsVisibility();
+
+                bool customValid = _addTaskModal.ValidateUpdatedModalOptions();
+                //после удаления и возвращения видимости полей возвращается ДА не вызывая никаких проверок
+                //https://github.com/a-postx/YA.WebClient/issues/2
+                bool blazoriseValid = _addParsingTaskModalValidation.ValidateAll();
+
+                //хачим: после удаления и возвращения видимости полей возвращается НЕТ даже если валидация запускалась и прошла успешно
+                if (_addTaskModal.SkipBlazoriseValidation)
+                {
+                    if (customValid)
+                    {
+                        _addTaskModal.SubmitButtonDisabled = false;
+                    }
+                }
+                else
+                {
+                    if (customValid && blazoriseValid)
+                    {
+                        _addTaskModal.SubmitButtonDisabled = false;
+                    }
+                }
+            }
+            else
+            {
+                _addTaskModal.OptionsEnabled = false;
+                _addParsingTaskModalValidation.ValidateAll();
+            }
+        }
+        else
+        {
+            _addParsingTaskModalValidation.ValidateAll();
+        }
+
+        _submitButtonIsLoading = false;
+        StateHasChanged();
+    }
+
+    private void OnActivePeriodStartChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _activePeriodStart = date;
+            _addTaskModal.ProfilesResultActivePeriodStart = date;
+        }
+        else //если не прописывать этот вариант получаем неработающий сброс в поле компонента
+        {
+            _activePeriodStart = null;
+        }
+    }
+
+    private void OnActivePeriodEndChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _activePeriodEnd = date;
+            _addTaskModal.ProfilesResultActivePeriodEnd = date;
+        }
+        else //если не прописывать этот вариант получаем неработающий сброс в поле компонента
+        {
+            _activePeriodEnd = null;
+        }
+    }
+
+    private void OnSelectedSourcesTabChanged(string name)
+    {
+        if (name == VkParsingTaskSourceType.Links.ToString())
+        {
+            _addTaskModal.SourceType = VkParsingTaskSourceType.Links;
+            _addTaskModal.OptionsSmRawTaskSources = null;
+
+            ResetTaskSourceTabsHelpingData();
+        }
+        else if (name == VkParsingTaskSourceType.Tasks.ToString())
+        {
+            _addTaskModal.SourceType = VkParsingTaskSourceType.Tasks;
+            _addTaskModal.OptionsSmRawLinkSources = null;
+        }
+    }
+
+    private void OnLastCommWallPostPeriodStartChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _commLastWallPostPeriodStart = date;
+            _addTaskModal.LastCommWallPostPeriodStart = date;
+        }
+        else //если не прописывать этот вариант получаем неработающий сброс в поле компонента
+        {
+            _commLastWallPostPeriodStart = null;
+            _addTaskModal.LastCommWallPostPeriodStart = null;
+        }
+    }
+
+    private void OnLastCommWallPostPeriodEndChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _commLastWallPostPeriodEnd = date;
+            _addTaskModal.LastCommWallPostPeriodEnd = date;
+        }
+        else //если не прописывать этот вариант получаем неработающий сброс в поле компонента
+        {
+            _commLastWallPostPeriodEnd = null;
+            _addTaskModal.LastCommWallPostPeriodEnd = null;
+        }
+    }
+
+    private void ResetTaskSourceTabsHelpingData()
+    {
+        _availableTasks = new List<VkQuickParsingTaskVm>();
+        _selectedTasks = new List<VkQuickParsingTaskVm>();
+        _selectedSearchValue = null;
+    }
+
+    private void OnTaskSearchValueChanged(string newValue)
+    {
+        VkQuickParsingTaskVm selectedTask = _availableTasks.Where(e => e.Title == newValue).FirstOrDefault();
+
+        if (selectedTask is not null)
+        {
+            _selectedTasks.Add(selectedTask);
+
+            _addTaskModal.AddTasksAsSources(_selectedTasks, false);
+        }
+    }
+
+    private void OnTaskItemRemoved(VkQuickParsingTaskVm taskItem)
+    {
+        _selectedTasks.Remove(taskItem);
+
+        _addTaskModal.AddTasksAsSources(_selectedTasks, false);
+    }
+
+    private async Task<bool> GetAvailableTasksListAsync(VkOneTimeParsingTaskVm vkOneTimeParsingTaskVm)
+    {
+        bool taskNotFound = false;
+
+        if (vkOneTimeParsingTaskVm?.SourceType == VkParsingTaskSourceType.Tasks)
+        {
+            _tasksSourcesIsLoading = true;
+            StateHasChanged();
+
+            List<string> selectedTaskIds = vkOneTimeParsingTaskVm.Options.RawTaskSources
+                .Split(Environment.NewLine).ToList();
+
+            List<Guid> selectedIds = selectedTaskIds
+                .Select(e => Guid.TryParse(e, out Guid taskId) ? taskId : Guid.Empty)
+                .Where(e => e != Guid.Empty).ToList();
+
+            ApiCommandResult<ICollection<VkQuickParsingTaskVm>> result =
+                await ApiRepository.GetVkOneTimeParsingTasks(selectedIds);
+
+            switch (result.Status)
+            {
+                case ApiCommandStatus.Ok:
+                    _selectedTasks = result.Data;
+                    break;
+
+                case ApiCommandStatus.NotFound:
+                    taskNotFound = true;
+                    break;
+
+                default:
+                    break;
+            }
+
+            _tasksSourcesIsLoading = false;
+            StateHasChanged();
+        }
+
+        return taskNotFound;
+    }
+
+    public async Task GetAvailableDataForControlsAsync(VkOneTimeParsingTaskVm detailedParsingTaskVm)
+    {
+        Task<bool> getTasksToShow = GetAvailableTasksListAsync(detailedParsingTaskVm);
+        Task getCurrentAds = _addTaskModal.GetAvailableVkAdsParams();
+        await Task.WhenAll(getTasksToShow, getCurrentAds);
+
+        StateHasChanged(); //надо ли?
+
+        if (getTasksToShow.Result)
+        {
+            await HandleModalChangedTimerCallback();
+        }
+        else
+        {
+            ResetModalCheckingTimer();
+        }
+    }
+
+    private string ConvertParsingTask(VkQuickParsingTaskVm task)
+    {
+        return task?.Title;
+    }
+
+    private async Task OnAddVkParsingTask()
+    {
+        _submitButtonIsLoading = true;
+        _addTaskModal.SubmitButtonDisabled = true;
+        StateHasChanged();
+
+        VkOneTimeParsingTaskSm vkOneTimeParsingTaskSm = _addTaskModal.CreateSm();
+
+        ApiCommandResult<VkOneTimeParsingTaskVm> result = await ApiRepository.CreateVkParsingTask(vkOneTimeParsingTaskSm);
+
+        _submitButtonIsLoading = false;
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                _addTaskModal.Reset();
+                _canBeClosed = true;
+                _modal.Hide();
+                _canBeClosed = false;
+                await OnTaskCreatedCallback.InvokeAsync(result.Data.Title);
+                break;
+
+            default:
+                _addTaskModal.SubmitButtonDisabled = false;
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    public override void Dispose()
+    {
+        _addTaskModal.PropertyChanged -= _modalPropertyChanged;
+        _addTaskModal.ExportToVkAdsChanged -= _exportToVkChanged;
+
+        base.Dispose();
+    }
+}

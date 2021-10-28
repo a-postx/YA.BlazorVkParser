@@ -1,0 +1,129 @@
+﻿@using System.ComponentModel
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Interfaces
+
+@inject IJSRuntime JS
+@inject IThemeOptionsState ThemeOptions
+
+<Modal @ref="_modal" Closing="@OnModalClosing" ShowBackdrop="true">
+    <ModalContent Centered="true" Size="ModalSize.Default" Class="@ThemeOptions.ModalContentClass">
+        <ModalHeader>
+            <ModalTitle>Выбор аккаунта</ModalTitle>
+        </ModalHeader>
+        <ModalBody MaxHeight="65">
+            <Field>
+                <FieldLabel>Аккаунт</FieldLabel>
+                <FieldBody ColumnSize="ColumnSize.Is12">
+                    @if (AvailableTenants is not null)
+                    {
+                        <Select TValue="Guid" SelectedValue="@_selectedTenantId" SelectedValueChanged="@OnTenantValueChanged">
+                            <SelectItem TValue="Guid" Value="Guid.Empty"><Text></Text></SelectItem>
+                            @foreach (TenantVm tenant in AvailableTenants)
+                            {
+                                <SelectItem TValue="Guid" Value="tenant.TenantId">@tenant.Name</SelectItem>
+                            }
+                        </Select>
+                    }
+                    else
+                    {
+                        <Select TValue="TenantVm" Disabled="true">
+                        </Select>
+                    }
+                </FieldBody>
+            </Field>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Success"
+                    Block="true"
+                    Disabled="@_submitButtonIsDisabled"
+                    Clicked="@(() => OnSelectTenantAsync())">
+                Выбрать
+            </Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+
+@code
+{
+    [Parameter]
+    public EventCallback<TenantVm> OnTenantSelectedCallback { get; set; }
+
+    [Parameter]
+    public ICollection<TenantVm> AvailableTenants { get; set; }
+
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    public bool IsShowing { get; set; } // если уже открыто, то выпадает исключение
+
+    private Modal _modal;
+
+    private Guid _selectedTenantId;
+    private bool _tenantSelected;
+
+    private bool _submitButtonIsDisabled = false;
+
+
+    public void Show()
+    {
+        if (!IsShowing)
+        {
+            _modal.Show();
+            IsShowing = true;
+            StateHasChanged();
+        }
+    }
+
+    public void Hide()
+    {
+        if (IsShowing)
+        {
+            _modal.Hide();
+            IsShowing = false;
+            StateHasChanged();
+            Reset();
+        }
+    }
+
+    private void OnModalClosing(CancelEventArgs e)
+    {
+        // just set Cancel to true to prevent modal from closing
+        if (!_tenantSelected)
+        {
+            e.Cancel = true;
+        }
+    }
+
+    private void OnTenantValueChanged(Guid tenantId)
+    {
+        _selectedTenantId = tenantId;
+    }
+
+    private async Task OnSelectTenantAsync()
+    {
+        if (_selectedTenantId != Guid.Empty)
+        {
+            TenantVm tenant = AvailableTenants.Where(e => e.TenantId == _selectedTenantId).FirstOrDefault();
+
+            if (tenant is not null)
+            {
+                _submitButtonIsDisabled = true;
+                StateHasChanged();
+
+                await OnTenantSelectedCallback.InvokeAsync(tenant);
+
+                _tenantSelected = true;
+
+                Hide();
+            }
+        }
+    }
+
+    private void Reset()
+    {
+        _selectedTenantId = Guid.Empty;
+        _tenantSelected = false;
+        _submitButtonIsDisabled = false;
+    }
+}

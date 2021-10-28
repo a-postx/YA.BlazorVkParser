@@ -1,0 +1,75 @@
+﻿@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Models.Dto
+@using YA.WebClient.Extensions
+@using YA.WebClient.Application.Events
+
+@inject IJSRuntime JS
+@inject IThemeOptionsState ThemeOptions
+@inject IRuntimeState RuntimeState
+
+@implements IDisposable
+
+@code
+{
+    [CascadingParameter]
+    public Task<AuthenticationState> AuthState { get; set; }
+
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private TenantVm _userTenant;
+
+    private EventHandler<TenantUpdatedEventArgs> _tenantUpdatedHandler;
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        TenantVm tenantVm = UserManager.GetTenant();
+
+        if (tenantVm != null)
+        {
+            _userTenant = tenantVm;
+        }
+
+        _tenantUpdatedHandler = async (s, args) => await RefreshTenantAsync(args);
+        RuntimeState.TenantUpdated += _tenantUpdatedHandler;
+
+        await ShowSupportChat();
+
+        await base.OnInitializedAsync();
+    }
+
+    private async Task RefreshTenantAsync(TenantUpdatedEventArgs args)
+    {
+        _userTenant = args.Tenant;
+        StateHasChanged();
+
+        await ShowSupportChat();
+    }
+
+    private async Task ShowSupportChat()
+    {
+        SupportChatUserInfo userInfo = new SupportChatUserInfo();
+
+        if (_userTenant != null)
+        {
+            userInfo.TenantId = _userTenant.TenantId.ToString();
+            userInfo.ТарифныйПлан = _userTenant.PricingTier?.Title;
+        }
+
+        AuthenticationState authState = await AuthState;
+
+        userInfo.name = !string.IsNullOrEmpty(authState?.User?.Identity?.Name)
+            ? authState?.User?.Identity?.Name
+            : null;
+
+        await JS.InvokeVoidAsync("Chatra", "setIntegrationData", userInfo);
+        await JS.InvokeVoidAsync("Chatra", "show");
+    }
+
+    public void Dispose()
+    {
+        RuntimeState.TenantUpdated += _tenantUpdatedHandler;
+    }
+}

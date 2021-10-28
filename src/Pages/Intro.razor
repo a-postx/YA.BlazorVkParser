@@ -1,0 +1,297 @@
+﻿@page "/intro"
+
+@layout EntranceDialogLayout
+
+@using AutoMapper
+@using YA.WebClient.Application.Models.SaveModels
+@using YA.WebClient.Application.Models.ViewModels
+@using Microsoft.Extensions.Primitives
+@using Microsoft.AspNetCore.WebUtilities
+@using System.Text.RegularExpressions
+@using YA.WebClient.Extensions
+@using YA.WebClient.Application.Enums
+
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject IMapper Mapper
+
+@attribute [Authorize]
+
+<PageApiIssueAlert />
+<div class="row no-gutters">
+    <div class="col-sm-12 col-lg-6 offset-lg-3 col-md-8 offset-md-2">
+        <div class="intro-middle">
+            <Field ColumnSize="ColumnSize.Is12" Class="no-gutters" Style="height:32px">
+                <img class="mb-3" src="/img/logo_wtitle_on_light_32x32.png" />
+            </Field>
+            <Form>
+                <Validations Mode="ValidationMode.Auto" @ref="_createTenantValidation" ValidateOnLoad="false">
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <h5 class="font-weight-normal mb-3">Давайте создадим ваше пространство...</h5>
+                    </Field>
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <Text Style="color:#697280">Выберите имя аккаунта, чтобы знакомые могли его легко распознать, когда их пригласили присоединиться.</Text>
+                    </Field>
+                    <Validation Validator="ValidateTenantNameInput">
+                        <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                            <FieldLabel><Icon Name="@("fa-flag")" /> Придумайте название аккаунта <span class="ml-1 text-danger">*</span></FieldLabel>
+                            <TextEdit Class="intro-form-control"
+                                        @bind-Text="@_tenantName"
+                                        MaxLength="128"
+                                        Disabled="@(!UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner)
+                                                    && !UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin))"
+                                        Placeholder="@_tenantNamePlaceholder">
+                                <Feedback>
+                                    <ValidationError Tooltip="false" />
+                                </Feedback>
+                            </TextEdit>
+                        </Field>
+                    </Validation>
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <Text Style="color:#697280">Куда должны приходить уведомления? Вы сможете добавить дополнительные способы уведомлений позднее.</Text>
+                    </Field>
+                    <Validation Validator="ValidateNotificationEmailInput">
+                        <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                            <FieldLabel><Icon Name="@("fa-envelope")" /> Электропочта для уведомлений <span class="ml-1 text-danger">*</span></FieldLabel>
+                            <TextEdit Class="intro-form-control"
+                                        @bind-Text="@_notificationEmail"
+                                        MaxLength="128">
+                                <Feedback>
+                                    <ValidationError Tooltip="false" />
+                                </Feedback>
+                            </TextEdit>
+                        </Field>
+                    </Validation>
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                        <Button Loading="@_submitButtonIsLoading"
+                                Color="Color.Success"
+                                Block="true"
+                                Clicked="@(async () => await UpdateUserAndTenantAsync())">
+                            Создать мой аккаунт <Icon Name="@("fa-angle-right")" />
+                        </Button>
+                    </Field>
+                </Validations>
+            </Form>
+        </div>
+    </div>
+</div>
+
+@code
+{
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private string _returnUrl { get; set; }
+
+    private string _tenantName { get; set; }
+    private string _notificationEmail { get; set; }
+
+    private UserSm _sourceUserSm { get; set; }
+    private TenantSm _sourceTenantSm { get; set; }
+
+    private string _tenantNamePlaceholder;
+
+    // валидация
+    private Validations _createTenantValidation;
+
+    //крутилки
+    private bool _submitButtonIsLoading = false;
+
+    private static Random _rnd = new Random();
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        _tenantNamePlaceholder = GetTenantNamePlaceholderText();
+
+        await base.OnInitializedAsync();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        Uri uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("returnUrl", out StringValues returnUrl))
+        {
+            _returnUrl = returnUrl;
+        }
+
+        UserVm userVm = UserManager.GetUser();
+
+        if (userVm != null)
+        {
+            if (!userVm.Settings.ShowGettingStarted)
+            {
+                ForwardToTheApp();
+            }
+
+            _sourceUserSm = Mapper.Map<UserSm>(userVm);
+            _notificationEmail = userVm.Email;
+        }
+
+        TenantVm tenantVm = UserManager.GetTenant();
+
+        if (tenantVm != null)
+        {
+            _sourceTenantSm = Mapper.Map<TenantSm>(tenantVm);
+        }
+
+        await base.OnParametersSetAsync();
+    }
+
+    private string GetTenantNamePlaceholderText()
+    {
+        List<string> names = new List<string>();
+        names.Add("напр. БольшойПерец");
+        names.Add("напр. ВолшебнаяВишня");
+        names.Add("напр. СуровыйРедис");
+        names.Add("напр. УмнаяПомидорка");
+
+#pragma warning disable CA5394 // Do not use insecure randomness
+        int rname = _rnd.Next(names.Count);
+#pragma warning restore CA5394 // Do not use insecure randomness
+
+        return names[rname];
+    }
+
+    private void ValidateTenantNameInput(ValidatorEventArgs e)
+    {
+        string rawInput = Convert.ToString(e.Value);
+
+        int errors = TenantNameIsValid(rawInput);
+
+        if (errors == 0)
+        {
+            e.Status = ValidationStatus.Success;
+        }
+        else if (errors == 1)
+        {
+            e.Status = ValidationStatus.Error;
+            e.ErrorText = "Введите название аккаунта";
+        }
+        else
+        {
+            e.Status = ValidationStatus.Error;
+            e.ErrorText = "Название должно быть не более 64 символов";
+        }
+
+        StateHasChanged();
+    }
+
+    private int TenantNameIsValid(string input)
+    {
+        int result = 0;
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return 1;
+        }
+
+        if (input.Length > 64)
+        {
+            return 2;
+        }
+
+        return result;
+    }
+
+    private void ValidateNotificationEmailInput(ValidatorEventArgs e)
+    {
+        string rawInput = Convert.ToString(e.Value);
+
+        if (string.IsNullOrEmpty(rawInput))
+        {
+            e.Status = ValidationStatus.None;
+        }
+        else
+        {
+            bool valid = NotificationEmailIsValid(rawInput);
+
+            if (valid)
+            {
+                e.Status = ValidationStatus.Success;
+            }
+            else
+            {
+                e.Status = ValidationStatus.Error;
+                e.ErrorText = "Введите адрес электронной почты";
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private bool NotificationEmailIsValid(string input)
+    {
+        bool result = false;
+
+        if (!string.IsNullOrWhiteSpace(input))
+        {
+            //https://stackoverflow.com/questions/5342375/regex-email-validation?page=1&tab=votes#tab-top
+            Regex regex = new Regex(@"^([\w\.\-]+)@([\w\-]+)((\.(\w){2,})+)$");
+            System.Text.RegularExpressions.Match match = regex.Match(input);
+            result = (match.Success) ? true : false;
+        }
+
+        return result;
+    }
+
+    private void ForwardToTheApp()
+    {
+        string navigationUrl = string.IsNullOrWhiteSpace(_returnUrl) ? "/home" : _returnUrl;
+
+        Navigation.NavigateTo(navigationUrl);
+    }
+
+    private async Task UpdateUserAndTenantAsync()
+    {
+        int errorsInTenantName = TenantNameIsValid(_tenantName);
+        bool notificationEmailIsValid = NotificationEmailIsValid(_notificationEmail);
+
+        if (errorsInTenantName == 0 && notificationEmailIsValid)
+        {
+            _submitButtonIsLoading = true;
+            StateHasChanged();
+
+            bool userUpdated = false;
+
+            UserSm destUserSm = new UserSm(_sourceUserSm.Name, _notificationEmail, new UserSettingSm(false));
+
+            UserVm userVm = await UserManager.UpdateUserAsync(_sourceUserSm, destUserSm);
+
+            if (userVm != null)
+            {
+                await JS.ConsoleLog("пользователь обновлён");
+                userUpdated = true;
+            }
+
+            bool tenantUpdated = false;
+
+            TenantSm destTenantSm = new TenantSm(_tenantName);
+
+            if (!_sourceTenantSm.Equals(destTenantSm))
+            {
+                TenantVm tenantVm = await UserManager.UpdateTenantAsync(_sourceTenantSm, destTenantSm, false);
+
+                if (tenantVm != null)
+                {
+                    await JS.ConsoleLog("арендатор обновлён");
+                    tenantUpdated = true;
+                }
+            }
+
+            _submitButtonIsLoading = false;
+
+            if (tenantUpdated && userUpdated)
+            {
+                ForwardToTheApp();
+            }
+        }
+        else
+        {
+            _createTenantValidation.ValidateAll();
+        }
+
+        StateHasChanged();
+    }
+}

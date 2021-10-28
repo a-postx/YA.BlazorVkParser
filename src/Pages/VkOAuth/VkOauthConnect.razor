@@ -1,0 +1,98 @@
+﻿@page "/vkoauthconnect"
+
+@layout LoadingLayout
+
+@using System.Text.Json;
+@using System.Text.Encodings.Web
+@using System.Text.Unicode
+@using YA.Common.Extensions;
+@using YA.WebClient.Application.Interfaces;
+@using YA.WebClient.Application.Models.ViewModels;
+@using YA.WebClient.Application.Models.Queries;
+@using YA.WebClient.Extensions;
+
+@inject NavigationManager Navigation
+@inject IVkTokenService VkTokenService
+@inject IJSRuntime JS
+@inject IVkOauthCodesState CodesContainer
+
+@attribute [Authorize]
+
+<div><Text Style="font-size:12px">обмениваем код на токен...</Text></div>
+
+@code
+{
+    protected async override Task OnInitializedAsync()
+    {
+        await JS.ConsoleLog("Обработка ответа с кодом ВК");
+
+        Uri codeResponseUri = new Uri(Navigation.Uri);
+
+        VkCodeResponse vkCodeResponse = codeResponseUri.Query.GetFromQueryString<VkCodeResponse>();
+
+        string jsonState = vkCodeResponse.state.Base64Decode();
+        VkCodeRequestState state = JsonSerializer
+            .Deserialize<VkCodeRequestState>(jsonState, new JsonSerializerOptions { Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) });
+
+        if (!CodesContainer.UsedCodes.Contains(vkCodeResponse.code))
+        {
+            if (vkCodeResponse.error == null && vkCodeResponse.code != null)
+            {
+                await HandleVkCodeResponseAsync(vkCodeResponse, state);
+            }
+            else
+            {
+                if (vkCodeResponse.error == "access_denied" && vkCodeResponse.error_reason == "user_denied"
+                    && vkCodeResponse.error_description == "User denied your request")
+                {
+                    await JS.ConsoleLog("Пользователь отклонил запрос на подключение соцсети");
+                    Navigation.NavigateTo(state.RedirectAddress);
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(vkCodeResponse.state))
+                    {
+                        if (Guid.TryParse(state.ClientRequestId, out Guid requestId))
+                        {
+                            await JS.ConsoleLog(vkCodeResponse.error);
+                            Navigation.NavigateTo($"/vkoauthconnect/snautherror/{requestId}");
+                        }
+                        else
+                        {
+                            await JS.ConsoleLog("Некорректный запрос авторизации: невозможно найти корелляционный идентификатор из состояния в ответе от ВКонтакте");
+                            Navigation.NavigateTo(state.RedirectAddress);
+                        }
+                    }
+                    else
+                    {
+                        await JS.ConsoleLog("Некорректный запрос авторизации: невозможно определить состояние в ответе от ВКонтакте");
+                        Navigation.NavigateTo(state.RedirectAddress);
+                    }
+                }
+            }
+        }
+        else
+        {
+            //пользователь нажал Назад после получения токена, код протух
+            Navigation.NavigateTo(state.RedirectAddress);
+        }
+    }
+
+    private async Task HandleVkCodeResponseAsync(VkCodeResponse vkCodeResponse, VkCodeRequestState state)
+    {
+        (VkAccessTokenVm vkAccessTokenVm, string error, Guid requestId) = await VkTokenService
+            .RequestAndSaveVkAccessToken(vkCodeResponse.code);
+
+        if (vkAccessTokenVm != null && string.IsNullOrEmpty(error))
+        {
+            CodesContainer.UsedCodes.Add(vkCodeResponse.code);
+            await JS.ConsoleLog("Получен токен для ВК пользователя " + vkAccessTokenVm.UserId);
+            Navigation.NavigateTo(state.RedirectAddress);
+        }
+        else
+        {
+            await JS.ConsoleLog("Ошибка обмена кода на токен: " + error + " " + requestId);
+            Navigation.NavigateTo($"/vkoauthconnect/snautherror/{requestId}?errorMessage={error}");
+        }
+    }
+}

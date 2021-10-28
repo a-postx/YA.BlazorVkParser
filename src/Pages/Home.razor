@@ -1,0 +1,64 @@
+﻿@page "/home"
+
+@inject IJSRuntime JS
+
+@attribute [Authorize]
+
+<NotificationsPanel />
+
+<Field>
+    <Heading Size="HeadingSize.Is3" Class="page-heading">
+        Привет,
+        <AuthorizeView>
+            <Authorized>@context.User.Identity.Name.Split(" ")[0]!</Authorized>
+            <NotAuthorized>прохожий!</NotAuthorized>
+        </AuthorizeView>
+    </Heading>
+</Field>
+
+<p>
+    <AuthorizeView>
+        <Authorized>
+            Сервис позволяет быстро и просто найти рекламную аудиторию в социальной сети ВКонтакте.
+        </Authorized>
+        <NotAuthorized>Заходи, гостем будешь</NotAuthorized>
+    </AuthorizeView>
+</p>
+
+<div class="row align-items-center">
+    <div class="col-8">
+        <video id="@_playerId" controls class="video-js"></video>
+    </div>
+</div>
+
+
+@code
+{
+    private string _playerId;
+
+    protected override void OnInitialized()
+    {
+        _playerId = "home-player";
+
+        base.OnInitialized();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JS.InvokeVoidAsync("loadPlayer", _playerId, new
+        {
+            controls = true,
+            autoplay = false,
+            preload = "auto",
+            width = 640,
+            height = 360,
+            techOrder = new[] { "youtube" },
+            sources = new[] {
+                new { type = "video/youtube", src = "https://www.youtube.com/watch?v=YhrzIDkNYPk" }
+            },
+            youtube = new { ytControls = 2 }
+        });
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+}

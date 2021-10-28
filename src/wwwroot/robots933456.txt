@@ -1,0 +1,1 @@
+﻿AzureServiceApp Docker HealthCheck is making requests to this

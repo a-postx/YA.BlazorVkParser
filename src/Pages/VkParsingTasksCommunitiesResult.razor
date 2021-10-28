@@ -1,0 +1,527 @@
+﻿@page "/parsingtasks/onetime/{taskid:guid}/tacommsearch"
+@page "/parsingtasks/periodic/{taskid:guid}/tacommsearch"
+@page "/parsingtasks/onetime/{taskid:guid}/commsearch"
+@page "/parsingtasks/periodic/{taskid:guid}/commsearch"
+
+@using YA.WebClient.Application.Interfaces
+@using System
+@using System.Threading
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Events
+@using YA.WebClient.Extensions
+
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject IYaToaster Toaster
+@inject IUiUserSettingsService UiSettings
+@inject IApiRepository ApiRepository
+@inject IPageUserWarningState PageUserWarning
+
+@implements IDisposable
+
+@attribute [Authorize]
+@* Modals and popups *@
+
+<AddNewParsingTaskModal @ref="_addNewTaskModal"
+                        LinkSources="_selectedFindings"
+                        OnTaskCreatedCallback="@((args) => OnTaskCreatedCallbackHandler(args))" />
+
+@* Page content *@
+
+<NotificationsPanel />
+
+<Breadcrumb Mode="BreadcrumbMode.None" Style="background-color:transparent;" Padding="Padding.Is0">
+    <BreadcrumbItem Active="false">
+        <BreadcrumbLink To="/home">Главная</BreadcrumbLink>
+    </BreadcrumbItem>
+    <BreadcrumbItem Active="false">
+        @if (Navigation.Uri.Contains("onetime"))
+        {
+            <BreadcrumbLink To="/parsingtasks/onetime">Задания</BreadcrumbLink>
+        }
+        else
+        {
+            <BreadcrumbLink To="/parsingtasks/periodic">Периодические задания</BreadcrumbLink>
+        }
+    </BreadcrumbItem>
+    <BreadcrumbItem Active="true">
+        <BreadcrumbLink To="/parsingtasks/">Результат поиска сообществ</BreadcrumbLink>
+    </BreadcrumbItem>
+</Breadcrumb>
+
+<Field>
+    <Heading Size="HeadingSize.Is3" Class="page-heading">
+        <span class="d-inline-block">Результат поиска сообществ</span>
+        @if (_results != null)
+        {
+            <span class="text-muted d-inline-block" style="padding-left:5px;font-weight:400">(@_results.TotalCount)</span>
+        }
+    </Heading>
+</Field>
+
+<VkCommResultsNotificationBanner />
+
+<div>
+    <div class="d-flex flex-nowrap justify-content-between">
+        <div>
+            <div class="action-stripe-item">
+                <Dropdown Direction="Direction.Down" RightAligned="false" Margin="Margin.Is0">
+                    <DropdownToggle Color="Color.Info" Split="false" Size="Size.Small" Style="font-size:14px">
+                        Действия
+                    </DropdownToggle>
+                    <DropdownMenu Class="dropdown-menu-shadow" Style="font-size:small">
+                        @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner)
+                            || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+                            || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.ReadWrite))
+                        {
+                            <DropdownItem Style="cursor:pointer"
+                                          Disabled="@(_itemsSelectionState.Where(e => e.Value == true).Count() == 0)"
+                                          Clicked="@OnAddCommunitiesToNewParsingTask">Добавить в новую задачу</DropdownItem>
+                        }
+                    </DropdownMenu>
+                </Dropdown>
+            </div>
+        </div>
+    </div>
+
+    <DataGrid TItem="VkCommunityFindingVm"
+              Virtualize="false"
+              Localizers="_dataGridLocalizers"
+              Hoverable="_results == null || _results?.Items?.Count == 0 ? false : true"
+              Borderless="false"
+              Bordered="false"
+              Editable="false"
+              Responsive="false"
+              Narrow="true"
+              Resizable="false"
+              ResizeMode="TableResizeMode.Header"
+              HeaderRowStyling="new DataGridRowStyling() { Style = _headerBg }"
+              RowSelectable="@((i) => false)"
+              Sortable="true"
+              SortMode="DataGridSortMode.Single"
+              ShowPager="@_paginationButtonsEnabled"
+              ShowPageSizes="@_paginationButtonsEnabled"
+              MaxPaginationLinks="3"
+              PagerPosition="DataGridPagerPosition.Bottom"
+              PageSize="_pageSize"
+              PageSizes="_pageSizes"
+              PageSizeChanged="@OnPageSizeChanged"
+              Data="@_results?.Items"
+              ReadData="@OnReadData"
+              RowHoverCursor="((u) => Cursor.Default)"
+              TotalItems="@_totalItems">
+        <FirstPageButtonTemplate>
+            <Icon Name="@("fa-angle-double-left")" />
+        </FirstPageButtonTemplate>
+        <PreviousPageButtonTemplate>
+            <Icon Name="@("fa-angle-left")" />
+        </PreviousPageButtonTemplate>
+        <NextPageButtonTemplate>
+            <Icon Name="@("fa-angle-right")" />
+        </NextPageButtonTemplate>
+        <LastPageButtonTemplate>
+            <Icon Name="@("fa-angle-double-right")" />
+        </LastPageButtonTemplate>
+        <ItemsPerPageTemplate>
+            <Text>записей на страницу</Text>
+        </ItemsPerPageTemplate>
+        <TotalItemsTemplate>
+            <Text>@GetTotalItemsText(context)</Text>
+        </TotalItemsTemplate>
+        <TotalItemsShortTemplate>
+            <Text>@GetTotalItemsText(context)</Text>
+        </TotalItemsShortTemplate>
+        <PageButtonTemplate>
+            @context.PageNumer
+        </PageButtonTemplate>
+        <LoadingTemplate>
+            <Field Style="height:3rem;" Display="Display.Flex">
+                <div class="centered">
+                    <Wave Color="black" Size="24px" />
+                </div>
+            </Field>
+        </LoadingTemplate>
+        <EmptyTemplate>
+            <Field Style="height:3rem;" Display="Display.Flex">
+                <div class="centered text-muted">
+                    @(_dataIsNotAvailable ? "Нет данных" : "Список пуст")
+                </div>
+            </Field>
+        </EmptyTemplate>
+        <DataGridColumns>
+            <DataGridCheckColumn TItem="VkCommunityFindingVm"
+                                 Field="@nameof(VkCommunityFindingVm.Selected)"
+                                 Width="3%"
+                                 Caption=""
+                                 Sortable="false"
+                                 Editable="false"
+                                 CellStyle="@((e) => "vertical-align:middle")">
+                <DisplayTemplate>
+                    <Check TValue="bool"
+                        Checked="@GetSelectionStatus(context)" @onclick:stopPropagation
+                        CheckedChanged="@(async (value) => await OnFindingSelectionChanged(value, context))" />
+                </DisplayTemplate>
+            </DataGridCheckColumn>
+            <DataGridColumn TItem="VkCommunityFindingVm"
+                            Field="@nameof(VkCommunityFindingVm.Name)"
+                            Width="40%" Caption="Группа" Sortable="true" Editable="false">
+                <DisplayTemplate>
+                    <img src="@context.PictureUrl" />
+                    <Blazorise.Link To="@("https://vk.com/club" + context.VkCommunityId)" Title="@context.Name" Target="Target.Blank">
+                        @context.Name&nbsp;<text style="font-size:11px"><Icon Name="@("fa-external-link-alt")" /></text>
+                    </Blazorise.Link>
+                </DisplayTemplate>
+            </DataGridColumn>
+            <DataGridNumericColumn TItem="VkCommunityFindingVm"
+                                   Field="@nameof(VkCommunityFindingVm.MembersCount)"
+                                   Width="6%"
+                                   CaptionTemplate="@_membersCaption" Sortable="true" Editable="false">
+                <DisplayTemplate>
+                    @context.MembersCount
+                </DisplayTemplate>
+            </DataGridNumericColumn>
+            @if (GetLastPageRouteSegment() == "tacommsearch" || _hasSourceMembersCountColumn)
+            {
+                <DataGridNumericColumn TItem="VkCommunityFindingVm"
+                                       Field="@nameof(VkCommunityFindingVm.SourceCommunitiesMembersCount)"
+                                       CaptionTemplate="@_taQuantityCaption"
+                                       Sortable="true"
+                                       Direction="SortDirection.Descending" Editable="false">
+                    <DisplayTemplate>
+                        @context.SourceCommunitiesMembersCount
+                    </DisplayTemplate>
+                </DataGridNumericColumn>
+            }
+            <DataGridDateColumn TItem="VkCommunityFindingVm" 
+                                Field="Statistics.LastPostDate"
+                                Width="11%"
+                                CaptionTemplate="@_lastPostDateCaption" Sortable="true" Editable="false">
+                <DisplayTemplate>
+                    @context.Statistics?.LastPostDate?.ToLocalTime().ToString("dd-MM-yyyy HH:mm")
+                </DisplayTemplate>
+            </DataGridDateColumn>
+            <DataGridNumericColumn TItem="VkCommunityFindingVm"
+                                   Field="Statistics.Viewability"
+                                   Width="5%" CaptionTemplate="@_viewsCaption" Sortable="true" Editable="false">
+                <DisplayTemplate>
+                    @context.Statistics?.Viewability
+                </DisplayTemplate>
+            </DataGridNumericColumn>
+            <DataGridNumericColumn TItem="VkCommunityFindingVm"
+                                   Field="Statistics.PostsPerDay"
+                                   Width="5%"
+                                   CaptionTemplate="@_postsPerDayCaption" Sortable="true" Editable="false">
+                <DisplayTemplate>
+                    @string.Format("{0:N4}", context.Statistics?.PostsPerDay)
+                </DisplayTemplate>
+            </DataGridNumericColumn>
+            <DataGridNumericColumn TItem="VkCommunityFindingVm"
+                                   Field="Statistics.ViewsPerPost"
+                                   Width="5%"
+                                   CaptionTemplate="@_viewsPerPostCaption" Sortable="true" Editable="false">
+                <DisplayTemplate>
+                    @string.Format("{0:N0}", context.Statistics?.ViewsPerPost)
+                </DisplayTemplate>
+            </DataGridNumericColumn>
+            <DataGridNumericColumn TItem="VkCommunityFindingVm"
+                                   Field="Statistics.ErDay"
+                                   Width="5%"
+                                   CaptionTemplate="@_erDayCaption" Sortable="true" Editable="false">
+                <DisplayTemplate>
+                    @string.Format("{0:N4}", context.Statistics?.ErDay)
+                </DisplayTemplate>
+            </DataGridNumericColumn>
+            <DataGridNumericColumn TItem="VkCommunityFindingVm"
+                                   Field="Statistics.ErPost"
+                                   Width="5%"
+                                   CaptionTemplate="@_erPostCaption" Sortable="true" Editable="false">
+                <DisplayTemplate>
+                    @string.Format("{0:N4}", context.Statistics?.ErPost)
+                </DisplayTemplate>
+            </DataGridNumericColumn>
+        </DataGridColumns>
+    </DataGrid>
+</div>
+
+
+@code
+{
+    [Parameter]
+    public Guid TaskId { get; set; }
+
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+
+    private List<int> _pageSizes = new List<int>() { 5, 10, 25, 50, 100 };
+    private int _pageSize;
+    private bool _paginationButtonsEnabled = true;
+
+    private List<string> _selectedFindings = new List<string>();
+
+    private AddNewParsingTaskModal _addNewTaskModal;
+
+    private PaginatedResultVm<VkCommunityFindingVm> _results;
+    private int _totalItems;
+    private string _headerBg = "background:#e9ecef;";
+
+    private Dictionary<long, bool> _itemsSelectionState = new Dictionary<long, bool>();
+
+    private DataGridLocalizers _dataGridLocalizers;
+
+    private bool _hasSourceMembersCountColumn = false;
+
+    private EventHandler<ApiCallCompletedEventArgs> _apiCallCompletedHandler;
+
+    private bool _dataIsNotAvailable;
+
+    private RenderFragment<DataGridColumn<VkCommunityFindingVm>> _taQuantityCaption = (v) => 
+    @<div class="d-inline-block"><Tooltip Fade="true"
+                                                 Text="Количество целевой аудитории"
+                                                 Placement="TooltipPlacement.Top"
+                                                 Multiline="false"><Icon Name="@("fa-crosshairs")" /></Tooltip></div>;
+    private RenderFragment<DataGridColumn<VkCommunityFindingVm>> _membersCaption = (v) => @<div class="d-inline-block"><Tooltip Fade="true"
+                                                 Text="Участников"
+                                                 Placement="TooltipPlacement.Top"
+                                                 Multiline="false"><Icon Name="@("fa-users")" /></Tooltip></div>;
+    private RenderFragment<DataGridColumn<VkCommunityFindingVm>> _viewsCaption = (v) => @<div class="d-inline-block"><Tooltip Fade="true"
+                                                 Text="Просматриваемость"
+                                                 Placement="TooltipPlacement.Top"
+                                                 Multiline="false"><Icon Name="@("fa-eye")" /></Tooltip></div>;
+    private RenderFragment<DataGridColumn<VkCommunityFindingVm>> _lastPostDateCaption = (v) => @<div class="d-inline-block"><Tooltip Fade="true"
+                                                 Text="Дата последнего поста"
+                                                 Placement="TooltipPlacement.Top"
+                                                 Multiline="false"><Icon Name="@("fa-edit")" /></Tooltip></div>;
+    private RenderFragment<DataGridColumn<VkCommunityFindingVm>> _viewsPerPostCaption = (v) => @<div class="d-inline-block"><Tooltip Fade="true"
+                                                 Text="Просмотров на пост"
+                                                 Placement="TooltipPlacement.Top"
+                                                 Multiline="false"><Icon Name="@("fa-eye")" />/<Icon Name="@("fa-edit")" /></Tooltip></div>;
+    private RenderFragment<DataGridColumn<VkCommunityFindingVm>> _postsPerDayCaption = (v) => @<div class="d-inline-block"><Tooltip Fade="true"
+                                                 Text="Постов в день"
+                                                 Placement="TooltipPlacement.Top"
+                                                 Multiline="false"><Icon Name="@("fa-edit")" />/<Icon Name="@("fa-calendar")" /></Tooltip></div>;
+    private RenderFragment<DataGridColumn<VkCommunityFindingVm>> _erDayCaption = (v) => @<div class="d-inline-block"><Tooltip Fade="true"
+                                                 Text="Коэффициент вовлечённости (EngagementRate) на сутки"
+                                                 Placement="TooltipPlacement.Top"
+                                                 Multiline="false">ER/<Icon Name="@("fa-calendar")" /></Tooltip></div>;
+    private RenderFragment<DataGridColumn<VkCommunityFindingVm>> _erPostCaption = (v) => @<div class="d-inline-block"><Tooltip Fade="true"
+                                                 Text="Коэффициент вовлечённости (EngagementRate) на пост"
+                                                 Placement="TooltipPlacement.Top"
+                                                 Multiline="false">ER/<Icon Name="@("fa-edit")" /></Tooltip></div>;
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        _pageSize = await GetPageSize();
+
+        _dataGridLocalizers = new DataGridLocalizers
+        {
+            ItemsPerPageLocalizer = new Blazorise.Localization.TextLocalizerHandler(ItemsPerPageLocalization)
+        };
+
+        _apiCallCompletedHandler = (s, args) => OnApiCallCompletedCallback(args);
+        ApiRepository.ApiCallCompleted += _apiCallCompletedHandler;
+
+        await base.OnInitializedAsync();
+    }
+
+    public static string ItemsPerPageLocalization(string name, params object[] arguments)
+    {
+        return "записей на страницу";
+    }
+
+    private async Task<int> GetPageSize()
+    {
+        int localPageSize = await UiSettings.GetParsingResultCommunitiesPaginationPageSizeAsync(_cts.Token);
+        return localPageSize == 0 ? 10 : localPageSize;
+    }
+
+    private void OnApiCallCompletedCallback(ApiCallCompletedEventArgs args)
+    {
+        PageUserWarning.Update(args.Status, args.Error, args.RequestId);
+    }
+
+    private async Task OnPageSizeChanged(int value)
+    {
+        _pageSize = value;
+        await UiSettings.SetParsingResultCommunitiesPaginationPageSizeAsync(value, _cts.Token);
+    }
+
+    private async Task OnFindingSelectionChanged(bool value, VkCommunityFindingVm finding)
+    {
+        System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+        sw.Start();
+        System.Diagnostics.Stopwatch stopwatch = new System.Diagnostics.Stopwatch();
+        stopwatch.Start();
+
+        if (_itemsSelectionState.TryGetValue(finding.VkCommunityId, out bool selected))
+        {
+            if (value != selected)
+            {
+                _itemsSelectionState[finding.VkCommunityId] = value;
+                sw.Stop();
+
+                await JS.ConsoleLog("Check updated time " + sw.ElapsedTicks);
+            }
+        }
+
+        stopwatch.Stop();
+
+        await JS.ConsoleLog("Check selection time " + stopwatch.ElapsedTicks);
+    }
+
+    private void OnAddCommunitiesToNewParsingTask()
+    {
+        _selectedFindings.Clear();
+
+        IEnumerable<KeyValuePair<long, bool>> selectedPairs = _itemsSelectionState.Where(e => e.Value == true);
+
+        foreach (KeyValuePair<long, bool> item in selectedPairs)
+        {
+            _selectedFindings.Add("https://vk.com/club" + item.Key);
+        }
+
+        _addNewTaskModal.Show();
+
+        StateHasChanged();
+    }
+
+    private void OnTaskCreatedCallbackHandler(object args)
+    {
+        if (args is string taskTitle)
+        {
+            Toaster.Success("Задача добавлена");
+        }
+    }
+
+    private async Task OnReadData(DataGridReadDataEventArgs<VkCommunityFindingVm> e)
+    {
+        //при изменении _pageSize чтение данных запускается повторно, поэтому тормозим запрос по-умолчанию
+        //https://github.com/stsrki/Blazorise/issues/1938
+        if (_pageSize != 0)
+        {
+            string[] orderBy = e.Columns
+                .Where(x => x.SortDirection == SortDirection.Ascending)
+                .Select(x => x.Field.Replace('.', '/')).ToArray();
+            string[] orderByDesc = e.Columns
+                .Where(x => x.SortDirection == SortDirection.Descending)
+                .Select(x => x.Field.Replace('.', '/')).ToArray();
+
+            //var currentSorting = e.Columns
+            //        .Where(c => c.Direction != SortDirection.None)
+            //        .Select(c => c.Field + (c.Direction == SortDirection.Descending ? " DESC" : ""));
+            //        //.JoinAsString(",");
+
+            string sortBy = string.Empty;
+            string sortDirection = string.Empty;
+
+            if (orderBy.Length > 0 && orderByDesc.Length == 0)
+            {
+                sortBy = orderBy.First();
+                sortDirection = "ASC";
+            }
+
+            if (orderByDesc.Length > 0 && orderBy.Length == 0)
+            {
+                sortBy = orderByDesc.First();
+                sortDirection = "DESC";
+            }
+
+            int pageSize = (e.PageSize == 0) ? (_pageSize == 0) ? 10 : _pageSize : e.PageSize;
+
+            ApiCommandResult<PaginatedResultVm<VkCommunityFindingVm>> result = await ApiRepository
+                .GetVkCommunitySearchFindings(TaskId, e.Page, pageSize, sortBy, sortDirection);
+
+            if (!e.CancellationToken.IsCancellationRequested)
+            {
+                if (result.Status == ApiCommandStatus.Ok)
+                {
+                    _dataIsNotAvailable = false;
+
+                    _results = result.Data;
+                    _totalItems = result.Data.TotalCount;
+
+                    _hasSourceMembersCountColumn = _results
+                        .Items.FirstOrDefault()?.SourceCommunitiesMembersCount != null;
+
+                    PopulateSelectionsState(result.Data);
+                }
+                else
+                {
+                    _dataIsNotAvailable = true;
+                    _results = null;
+                    _totalItems = 0;
+                }
+
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void PopulateSelectionsState(PaginatedResultVm<VkCommunityFindingVm> itemsPage)
+    {
+        foreach (var item in itemsPage.Items)
+        {
+            if (!_itemsSelectionState.TryGetValue(item.VkCommunityId, out bool selected))
+            {
+                _itemsSelectionState[item.VkCommunityId] = false;
+            }
+            else
+            {
+                _itemsSelectionState[item.VkCommunityId] = selected;
+            }
+        }
+    }
+
+    private bool GetSelectionStatus(VkCommunityFindingVm item)
+    {
+        if (_itemsSelectionState.TryGetValue(item.VkCommunityId, out bool selected))
+        {
+            return selected;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private string GetTotalItemsText(PaginationContext<VkCommunityFindingVm> context)
+    {
+        string result = string.Empty;
+
+        if (context.TotalItems > context.CurrentPageSize)
+        {
+            int curStart = ((context.CurrentPage - 1) * context.CurrentPageSize + 1);
+            int curEnd = Math.Min(context.CurrentPage * context.CurrentPageSize, context.TotalItems ?? default);
+            //прикрутить склонения числительных
+            result = curStart + " - " + curEnd + " из " + context.TotalItems + " записей";
+        }
+        else
+        {
+            //прикрутить склонения числительных
+            result = context.TotalItems + " записей";
+        }
+
+        return result;
+    }
+
+    private string GetLastPageRouteSegment()
+    {
+        if (Uri.TryCreate(Navigation.Uri, UriKind.Absolute, out Uri currentUrl))
+        {
+            return currentUrl.Segments[currentUrl.Segments.Length - 1];
+        }
+        else
+        {
+            return "unknown";
+        }
+    }
+
+    public void Dispose()
+    {
+        ApiRepository.ApiCallCompleted -= _apiCallCompletedHandler;
+    }
+}

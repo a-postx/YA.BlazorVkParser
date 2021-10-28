@@ -1,0 +1,21 @@
+﻿@using YA.WebClient.Application.Interfaces
+
+@inject INotificationsPanelState PanelState
+
+<button style="width:39px;padding-left:2px;padding-right:2px;margin-left:7px;margin-right:7px;margin-top:6px;background-color:transparent;border:1px solid transparent;padding:.375rem .75rem"
+        @onclick="OnToggle">
+    <span class="mud-badge">
+        <BarIcon IconName="IconName.Bell" Style="font-size:18px" />
+        @*<span class="mud-badge-wrapper">
+            <span class="mud-badge-badge mud-badge-dot mud-badge-top mud-badge-right" style="color:white;background-color:red;font-size:7px">1</span>
+        </span>*@
+    </span>
+</button>
+
+@code
+{
+    private void OnToggle()
+    {
+        PanelState.UpdateVisibility(!PanelState.Visible);
+    }
+}

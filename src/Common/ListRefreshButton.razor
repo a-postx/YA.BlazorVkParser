@@ -1,0 +1,114 @@
+﻿@using System.Threading
+
+@implements IDisposable
+
+<Dropdown Direction="Direction.Down" RightAligned="true" Margin="Margin.Is0">
+    <Button Class="unselectable" Size="Size.Small" Color="Color.Info" Clicked="@(async () => await OnNeedRefreshCallback.InvokeAsync())">
+        <Icon Name="IconName.SyncAlt"></Icon>
+    </Button>
+    <DropdownToggle Color="Color.Info" Split="true" Size="Size.Small">@_currentUpdateIntervalName</DropdownToggle>
+    <DropdownMenu Style="font-size:.875rem;min-width:0;border-radius:0;padding:0 0;">
+        @foreach (int interval in _availableIntervals)
+        {
+            <DropdownItem Style="cursor:pointer" Clicked="@(() => SetRefreshInterval(interval))">@GetIntervalName(interval)</DropdownItem>
+        }
+    </DropdownMenu>
+</Dropdown>
+
+@code
+{
+    [Parameter]
+    public EventCallback OnNeedRefreshCallback { get; set; }
+
+    [Parameter]
+    public int InitRefreshInterval { get; set; }
+
+    public int UpdateInterval
+    {
+        get
+        {
+            return _updateInterval;
+        }
+    }
+
+    public Timer BackgroundRefreshTimer;
+    public event EventHandler NeedsBackgroundRefresh;
+
+    private int _updateInterval;
+    private string _currentUpdateIntervalName;
+    private List<int> _availableIntervals = new List<int>() { 0, 10000, 30000, 60000, 300000 };
+
+    protected override void OnInitialized()
+    {
+        SetRefreshInterval(InitRefreshInterval);
+    }
+
+    private void SetRefreshInterval(int intervalMsec)
+    {
+        if (intervalMsec > 0)
+        {
+            _updateInterval = intervalMsec;
+
+            if (BackgroundRefreshTimer == null)
+            {
+                BackgroundRefreshTimer = new Timer(_ => NeedsBackgroundRefresh?.Invoke(this, new EventArgs()), null, _updateInterval, _updateInterval);
+            }
+            else
+            {
+                try
+                {
+                    BackgroundRefreshTimer.Change(_updateInterval, _updateInterval);
+                }
+                //в случае ухода со страницы таймер может быть уничтожен во время операции
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+            }
+        }
+        else
+        {
+            BackgroundRefreshTimer?.Dispose();
+            BackgroundRefreshTimer = null;
+            _updateInterval = 0;
+        }
+
+        _currentUpdateIntervalName = GetCurrentIntervalLabel();
+    }
+
+    public void UpdateRefreshInterval()
+    {
+        SetRefreshInterval(_updateInterval);
+    }
+
+    private string GetIntervalName(int interval)
+    {
+        switch (interval)
+        {
+            case 0: return "выкл";
+            case 10000: return "10с";
+            case 30000: return "30с";
+            case 60000: return "1м";
+            case 300000: return "5м";
+            default: return string.Empty;
+        }
+    }
+
+    private string GetCurrentIntervalLabel()
+    {
+        switch (_updateInterval)
+        {
+            case 0: return string.Empty;
+            case 10000: return "10c";
+            case 30000: return "30c";
+            case 60000: return "1м";
+            case 300000: return "5м";
+            default: throw new ArgumentOutOfRangeException(nameof(_updateInterval), _updateInterval, null);
+        }
+    }
+
+    public void Dispose()
+    {
+        BackgroundRefreshTimer?.Dispose();
+    }
+}

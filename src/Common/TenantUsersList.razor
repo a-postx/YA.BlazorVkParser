@@ -1,0 +1,295 @@
+﻿@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Events
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application
+@using YA.WebClient.Extensions
+
+@inject IJSRuntime JS
+@inject IRuntimeState RuntimeState
+@inject IApiRepository ApiRepository
+
+@implements IDisposable
+
+@* Modals and popups *@
+<ActionErrorModal @ref="_actionErrorModal" ErrorText="@_actionErrorText" />
+
+<ActionConfirmationModal @ref="_confirmationModal"
+            @bind-OnYesAction="_confirmationAction"
+            @bind-MessageText="_confirmationText" />
+
+<Table>
+    <TableHeader>
+        <TableRow>
+            <TableHeaderCell>Имя</TableHeaderCell>
+            <TableHeaderCell>Электропочта</TableHeaderCell>
+            <TableHeaderCell>Роль</TableHeaderCell>
+            <TableHeaderCell>Создан</TableHeaderCell>
+            <TableHeaderCell></TableHeaderCell>
+        </TableRow>
+    </TableHeader>
+    <TableBody>
+        @if (_currentTenant != null)
+        {
+            @if (_currentTenant.Memberships is not null)
+            {
+                @foreach (MembershipVm membershipVm in _currentTenant.Memberships)
+                {
+                    _membershipIsDeletingStates.TryGetValue(membershipVm.MembershipID, out bool isDeleting);
+
+                    <TableRow>
+                        <TableRowCell>@membershipVm.User?.Name</TableRowCell>
+                        <TableRowCell>@membershipVm.User?.Email</TableRowCell>
+                        <TableRowCell>@GetAccessTypeName(membershipVm.AccessType)</TableRowCell>
+                        <TableRowCell>@membershipVm.CreatedDateTime.ToLocalTime().ToString("dd-MM-yyyy HH:mm")</TableRowCell>
+                        <TableRowCell>
+                            @if (membershipVm.AccessType != MembershipAccessType.Owner)
+                            {
+                                <Buttons Class="mr-1">
+                                    <Button Size="Size.Small"
+                                            Outline="true"
+                                            Loading="isDeleting"
+                                            Disabled="isDeleting"
+                                            Color="Color.Dark"
+                                            Clicked="@(() => ShowMembershipDeletionConfirmation(membershipVm))"
+                                            Style="width:2rem">
+                                        @if (!isDeleting)
+                                        {
+                                            <div class="unselectable"><Icon Name="IconName.Delete"></Icon></div>
+                                        }
+                                    </Button>
+                                </Buttons>
+                            }
+                        </TableRowCell>
+                    </TableRow>
+                }
+            }
+
+            @if (_currentTenant.Invitations is not null)
+            {
+                @foreach (InvitationVm inviteVm in _currentTenant.Invitations)
+                {
+                    @if (!inviteVm.Claimed)
+                    {
+                        _invitationIsDeletingStates.TryGetValue(inviteVm.YaInvitationID, out bool isDeleting);
+
+                        <TableRow>
+                            <TableRowCell>@GetInviitationStatusName(inviteVm.Status)</TableRowCell>
+                            <TableRowCell>@inviteVm.Email</TableRowCell>
+                            <TableRowCell>@GetAccessTypeName(inviteVm.AccessType)</TableRowCell>
+                            <TableRowCell>@inviteVm.CreatedDateTime.ToLocalTime().ToString("dd-MM-yyyy HH:mm")</TableRowCell>
+                            <TableRowCell>
+                                <Buttons Class="mr-1">
+                                    <Button Size="Size.Small"
+                                            Outline="true"
+                                            Loading="isDeleting"
+                                            Disabled="isDeleting"
+                                            Color="Color.Dark"
+                                            Clicked="@(() => ShowInvitationDeletionConfirmation(inviteVm))"
+                                            Style="width:2rem">
+                                        @if (!isDeleting)
+                                        {
+                                            <div class="unselectable"><Icon Name="IconName.Delete"></Icon></div>
+                                        }
+                                    </Button>
+                                </Buttons>
+                            </TableRowCell>
+                        </TableRow>
+                    }
+                }
+            }
+        }
+    </TableBody>
+</Table>
+
+
+@code
+{
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnInviteDeletedCallback { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnMembershipDeletedCallback { get; set; }
+
+    private TenantVm _currentTenant;
+
+    private EventHandler<TenantsUpdatedEventArgs> _tenantsUpdatedHandler;
+
+    private ActionErrorModal _actionErrorModal;
+    private string _actionErrorText;
+
+    private ActionConfirmationModal _confirmationModal;
+    private string _confirmationText = string.Empty;
+    private Action _confirmationAction = () => Empty();
+
+    protected Dictionary<Guid, bool> _membershipIsDeletingStates = new Dictionary<Guid, bool>();
+    protected Dictionary<Guid, bool> _invitationIsDeletingStates = new Dictionary<Guid, bool>();
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        _currentTenant = GetCurrentTenant();
+
+        _tenantsUpdatedHandler = (s, args) => RefreshTenants(args);
+        RuntimeState.TenantsUpdated += _tenantsUpdatedHandler;
+
+        await base.OnInitializedAsync();
+    }
+
+    private void PopulateMembershipAndInvitationDeletingState(TenantVm tenantVm)
+    {
+        if (tenantVm.Memberships is not null)
+        {
+            _membershipIsDeletingStates = new Dictionary<Guid, bool>(tenantVm.Memberships.Count);
+
+            foreach (MembershipVm membership in tenantVm.Memberships)
+            {
+                _membershipIsDeletingStates.Add(membership.MembershipID, false);
+            }
+        }
+
+        if (tenantVm.Invitations is not null)
+        {
+            _invitationIsDeletingStates = new Dictionary<Guid, bool>(tenantVm.Invitations.Count);
+
+            foreach (InvitationVm invitation in tenantVm.Invitations)
+            {
+                _invitationIsDeletingStates.Add(invitation.YaInvitationID, false);
+            }
+        }
+    }
+
+    private void RefreshTenants(TenantsUpdatedEventArgs args)
+    {
+        _currentTenant = GetCurrentTenant();
+
+        StateHasChanged();
+    }
+
+    private string GetInviitationStatusName(TenantInvitationStatus status)
+    {
+        @switch (status)
+        {
+            case TenantInvitationStatus.New:
+                return "Приглашение создано";
+            case TenantInvitationStatus.Sent:
+                return "Приглашение отправлено";
+            default:
+                return "Приглашение";
+        }
+    }
+
+    private string GetAccessTypeName(MembershipAccessType accessType)
+    {
+        @switch (accessType)
+        {
+            case MembershipAccessType.ReadOnly:
+                return "ТолькоЧтение";
+            case MembershipAccessType.ReadWrite:
+                return "Запись";
+            case MembershipAccessType.Admin:
+                return "Админ";
+            case MembershipAccessType.Owner:
+                return "Владелец";
+            default:
+                return "неизвестно";
+        }
+    }
+
+    private TenantVm GetCurrentTenant()
+    {
+        TenantVm tenant = RuntimeState.GetTenants()?.Where(e => e.Current == true).FirstOrDefault();
+
+        if (tenant is not null)
+        {
+            PopulateMembershipAndInvitationDeletingState(tenant);
+        }
+
+        return tenant;
+    }
+
+    private async Task DeleteMembership(Guid yaMembershipId)
+    {
+        _membershipIsDeletingStates[yaMembershipId] = true;
+        StateHasChanged();
+
+        ApiCommandResult<string> result = await ApiRepository.DeleteMembership(yaMembershipId);
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                await OnMembershipDeletedCallback.InvokeAsync(string.Empty);
+                await UserManager.RefreshStateAsync();
+                break;
+
+            case ApiCommandStatus.NotFound:
+                _actionErrorText = "Не найдено";
+                _actionErrorModal.Show();
+                _membershipIsDeletingStates[yaMembershipId] = false;
+                break;
+
+            default:
+                _membershipIsDeletingStates[yaMembershipId] = false;
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task DeleteInvitation(Guid yaTenantInvitationId)
+    {
+        _invitationIsDeletingStates[yaTenantInvitationId] = true;
+        StateHasChanged();
+
+        ApiCommandResult<string> result = await ApiRepository.DeleteInvitation(yaTenantInvitationId);
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                await OnInviteDeletedCallback.InvokeAsync(string.Empty);
+                await UserManager.RefreshStateAsync();
+                break;
+
+            case ApiCommandStatus.NotFound:
+                _actionErrorText = result.ErrorText;
+                _actionErrorModal.Show();
+                _invitationIsDeletingStates[yaTenantInvitationId] = false;
+                break;
+
+            default:
+                _invitationIsDeletingStates[yaTenantInvitationId] = false;
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    private void ShowInvitationDeletionConfirmation(InvitationVm invitation)
+    {
+        _confirmationAction = async () => await DeleteInvitation(invitation.YaInvitationID);
+        _confirmationText = $"Вы действительно хотите отменить приглашение в аккаунт для {invitation.Email}?";
+
+        _confirmationModal.Show();
+    }
+
+    private void ShowMembershipDeletionConfirmation(MembershipVm membership)
+    {
+        _confirmationAction = async () => await DeleteMembership(membership.MembershipID);
+        _confirmationText = $"Вы действительно хотите удалить доступ {membership.User?.Email} к этому аккаунту?";
+
+        _confirmationModal.Show();
+    }
+
+    private static void Empty()
+    {
+
+    }
+
+    public void Dispose()
+    {
+        RuntimeState.TenantsUpdated -= _tenantsUpdatedHandler;
+    }
+}

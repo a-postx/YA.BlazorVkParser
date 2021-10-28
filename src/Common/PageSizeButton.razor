@@ -1,0 +1,26 @@
+﻿<Text Class="d-inline-block" style="vertical-align:middle;">Записей на страницу:</Text>
+<div class="d-inline-block">
+    <Select Style="width:auto;height:calc(1.5em + .5rem + 2px)"
+            Size="Size.Small"
+            TValue="int"
+            SelectedValue="@PageSize"
+            SelectedValueChanged="@(async (e) => await PageSizeChanged.InvokeAsync(e))"
+            Disabled="@Disabled">
+        <SelectItem Value="5"><Text>5</Text></SelectItem>
+        <SelectItem Value="10"><Text>10</Text></SelectItem>
+        <SelectItem Value="25"><Text>25</Text></SelectItem>
+        <SelectItem Value="50"><Text>50</Text></SelectItem>
+    </Select>
+</div>
+
+@code
+{
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public int PageSize { get; set; }
+
+    [Parameter]
+    public EventCallback<int> PageSizeChanged { get; set; }
+}

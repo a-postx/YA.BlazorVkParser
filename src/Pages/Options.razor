@@ -1,0 +1,466 @@
+﻿@page "/options/{Tab}"
+
+@using AutoMapper
+@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Models.SaveModels
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Events
+@using System.ComponentModel.DataAnnotations
+
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IMapper Mapper
+@inject IYaToaster Toaster
+@inject IApiRepository ApiRepository
+@inject IThemeOptionsState ThemeOptions
+@inject IPageUserWarningState PageUserWarning
+
+@implements IDisposable
+
+@attribute [Authorize]
+
+@* Modals and popups *@
+<InviteUserToTenantModal @ref="_inviteUserToTenantModal"
+                         OnInvitationAddedCallback="@((args) => OnInvitationAddedCallbackHandler(args))" />
+
+@* Page content *@
+
+<NotificationsPanel />
+
+<Breadcrumb Mode="BreadcrumbMode.None" Style="background-color:transparent;" Padding="Padding.Is0">
+    <BreadcrumbItem>
+        <BreadcrumbLink To="/home">Главная</BreadcrumbLink>
+    </BreadcrumbItem>
+    @* что-то автоматически не распознаются при параметризированной навигации *@
+    <BreadcrumbItem Active="true">
+        <BreadcrumbLink To="@_breadcrumbTabName">Настройки</BreadcrumbLink>
+    </BreadcrumbItem>
+</Breadcrumb>
+
+<Field>
+    <Heading Size="HeadingSize.Is3" Class="page-heading">Настройки</Heading>
+</Field>
+
+<PageApiIssueAlert />
+
+@if (!_userIsLoading)
+{
+    <Tabs SelectedTab="@_tabName" SelectedTabChanged="@OnSelectedTabChanged">
+        <Items>
+            <Tab Name="@TabNames.profile.ToString()" Class="boldtext text-uppercase" Style="font-size:.85rem;letter-spacing:.05rem">Профиль</Tab>
+            @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+                || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner))
+            {
+                <Tab Name="@TabNames.account.ToString()" Class="boldtext text-uppercase" Style="font-size:.85rem;letter-spacing:.05rem">Аккаунт</Tab>
+            }
+            @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner))
+            {
+                <Tab Name="@TabNames.access.ToString()" Class="boldtext text-uppercase" Style="font-size:.85rem;letter-spacing:.05rem">Доступ</Tab>
+                <Tab Name="@TabNames.integrations.ToString()" Class="boldtext text-uppercase" Style="font-size:.85rem;letter-spacing:.05rem">Интеграции</Tab>
+                <Tab Name="@TabNames.billing.ToString()" Class="boldtext text-uppercase" Style="font-size:.85rem;letter-spacing:.05rem">Тарифы и Платежи</Tab>
+            }
+        </Items>
+        <Content>
+            <TabPanel Name="@TabNames.profile.ToString()">
+                <Field Class="pt-3 pb-3">
+                    <Heading Size="HeadingSize.Is5">Персональные настройки</Heading>
+                    <Field Class="no-gutters">
+                        <Text Class="text-muted">Выберите адрес, на который должны приходить уведомления.</Text>
+                    </Field>
+                    <Validations Mode="ValidationMode.Auto" @ref="_userValidation" ValidateOnLoad="false">
+                        <Validation Validator="ValidateNotificationEmailInput">
+                            <Field Class="no-gutters">
+                                <FieldLabel><Icon Name="@("fa-envelope")" /> Электропочта</FieldLabel>
+                                <TextEdit Class="intro-form-control" @bind-Text="@_notificationEmail" MaxLength="128">
+                                    <Feedback>
+                                        <ValidationError Tooltip="false" />
+                                    </Feedback>
+                                </TextEdit>
+                            </Field>
+                        </Validation>
+                    </Validations>
+                    <Field Class="no-gutters">
+                        <Button Loading="@_submitButtonIsLoadingAndDisabled"
+                                Color="Color.Primary"
+                                Disabled="@(_userEmailIsInvalid || _submitButtonIsLoadingAndDisabled)"
+                                Clicked="@(async () => await UpdateUserAsync())">
+                            Сохранить
+                        </Button>
+                    </Field>
+                </Field>
+            </TabPanel>
+            @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+                || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner))
+            {
+                <TabPanel Name="@TabNames.account.ToString()">
+                    <Field Class="pt-3 pb-3">
+                        <Heading Size="HeadingSize.Is5">Настройки аккаунта</Heading>
+                        <Field Class="no-gutters">
+                            <Text Class="text-muted">Выберите имя аккаунта, чтобы знакомые могли его легко распознать, когда их пригласили присоединиться.</Text>
+                        </Field>
+                        <Validations Mode="ValidationMode.Auto" @ref="_tenantValidation" ValidateOnLoad="false">
+                            <Validation Validator="ValidateTenantNameInput">
+                                <Field Class="no-gutters">
+                                    <FieldLabel><Icon Name="@("fa-flag")" /> Название аккаунта</FieldLabel>
+                                    <TextEdit Class="intro-form-control" @bind-Text="@_tenantName" MaxLength="128">
+                                        <Feedback>
+                                            <ValidationError Tooltip="false" />
+                                        </Feedback>
+                                    </TextEdit>
+                                    <small class="text-muted float-right">идентификатор: @_tenant?.TenantId</small>
+                                </Field>
+                            </Validation>
+                        </Validations>
+                        <Field Class="no-gutters">
+                            <Button Loading="@_submitButtonIsLoadingAndDisabled"
+                                    Color="Color.Primary"
+                                    Disabled="@(_tenantNameIsInvalid || _submitButtonIsLoadingAndDisabled)"
+                                    Clicked="@(async () => await UpdateTenantAsync())">
+                                Сохранить
+                            </Button>
+                        </Field>
+                    </Field>
+                </TabPanel>
+            }
+            @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner))
+            {
+                <TabPanel Name="@TabNames.access.ToString()">
+                    <Field Class="pt-3 pb-3">
+                        <Heading Size="HeadingSize.Is5">Команда</Heading>
+                        <Field Class="no-gutters">
+                            <Text Class="text-muted">Пригласите знакомых в свою команду и управляйте доступом к своему аккаунту.</Text>
+                        </Field>
+                        <TenantUsersList OnInviteDeletedCallback="@((args) => OnInviteDeletedCallbackHandler(args))"
+                                         OnMembershipDeletedCallback="@((args) => OnMembershipDeletedCallbackHandler(args))" />
+                        <Field Class="no-gutters">
+                            <Button Color="Color.Secondary"
+                                    Clicked="@(() => ShowInviteTenantUserModal())">
+                                Пригласить пользователя
+                            </Button>
+                        </Field>
+                    </Field>
+                </TabPanel>
+                <TabPanel Name="@TabNames.integrations.ToString()">
+                    <Field Class="pt-3 pb-3">
+                        <Heading Size="HeadingSize.Is5">Интеграции</Heading>
+                        <Field Class="no-gutters">
+                            <Text Class="text-muted">Соедините приложение с внешними сервисами, чтобы получить соответствующий функционал.</Text>
+                        </Field>
+                        <IntegrationsManagement Visible="@(_tabName == TabNames.integrations.ToString())" />
+                    </Field>
+                </TabPanel>
+                <TabPanel Name="@TabNames.billing.ToString()">
+                    <Field Class="pt-3 pb-3">
+                        <Heading Size="HeadingSize.Is5">Тарифы и платежи</Heading>
+                        <Field Class="no-gutters">
+                            <Text Class="text-muted">Посмотрите детали тарификации и измените ваш тарифный план.</Text>
+                        </Field>
+                        <Table Borderless="true" FullWidth="true" @bind-Class="@ThemeOptions.TableClass">
+                            <TableBody Float="Float.Left">
+                                <TableRow Padding="Padding.Is0">
+                                    <TableRowHeader>Текущий тариф</TableRowHeader>
+                                    <TableRowCell>@_tenant?.PricingTier?.Title</TableRowCell>
+                                </TableRow>
+                                <TableRow Padding="Padding.Is0">
+                                    <TableRowHeader>Истекает</TableRowHeader>
+                                    <TableRowCell>@(_tenant?.PricingTierActivatedUntilDateTime == DateTime.MinValue ? "-" : _tenant?.PricingTierActivatedUntilDateTime.ToString())</TableRowCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </Field>
+                </TabPanel>
+            }
+        </Content>
+    </Tabs>
+}
+else
+{
+    <PageContentIsLoading />
+}
+
+@code
+{
+    [Parameter]
+    public string Tab { get; set; }
+    [Parameter]
+    public EventCallback<string> TabChanged { get; set; }
+
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private InviteUserToTenantModal _inviteUserToTenantModal;
+
+    private string _tabName { get; set; }
+    private string _breadcrumbTabName { get; set; }
+
+    private enum TabNames
+    {
+        profile,
+        account,
+        access,
+        integrations,
+        billing
+    }
+
+    private string _tenantName { get; set; }
+    private string _notificationEmail { get; set; }
+
+    private TenantVm _tenant { get; set; }
+
+    private UserSm _sourceUserSm { get; set; }
+    private TenantSm _sourceTenantSm { get; set; }
+
+    private Validations _userValidation;
+    private Validations _tenantValidation;
+
+    private bool _tenantNameIsInvalid;
+    private bool _userEmailIsInvalid;
+
+    private bool _submitButtonIsLoadingAndDisabled = false;
+
+    private bool _userIsLoading = true;
+
+    private EventHandler<ApiCallCompletedEventArgs> _apiCallCompletedHandler;
+
+
+    protected override void OnInitialized()
+    {
+        _apiCallCompletedHandler = (s, args) => OnApiCallCompletedCallback(args);
+        ApiRepository.ApiCallCompleted += _apiCallCompletedHandler;
+
+        base.OnInitialized();
+    }
+
+    protected override void OnParametersSet()
+    {
+        _tabName = Tab;
+        _breadcrumbTabName = $"/options/{Tab}";
+
+        SetLocalParams();
+
+        base.OnParametersSet();
+    }
+
+    private void SetLocalParams()
+    {
+        UserVm userVm = UserManager.GetUser();
+
+        if (userVm != null)
+        {
+            _sourceUserSm = Mapper.Map<UserSm>(userVm);
+            _notificationEmail = userVm.Email;
+
+            _userIsLoading = false;
+        }
+        else
+        {
+            _userIsLoading = true;
+        }
+
+        TenantVm tenantVm = UserManager.GetTenant();
+
+        if (tenantVm != null)
+        {
+            _sourceTenantSm = Mapper.Map<TenantSm>(tenantVm);
+            _tenantName = tenantVm.Name;
+            _tenant = tenantVm;
+        }
+    }
+
+    private void ValidateTenantNameInput(ValidatorEventArgs e)
+    {
+        string rawInput = Convert.ToString(e.Value);
+
+        int errors = GetErrorsInTenantName(rawInput);
+
+        if (errors == 0)
+        {
+            e.Status = ValidationStatus.Success;
+            _tenantNameIsInvalid = false;
+        }
+        else if (errors == 1)
+        {
+            e.Status = ValidationStatus.Error;
+            e.ErrorText = "Введите название аккаунта";
+            _tenantNameIsInvalid = true;
+        }
+        else
+        {
+            e.Status = ValidationStatus.Error;
+            e.ErrorText = "Название должно быть не более 64 символов";
+            _tenantNameIsInvalid = true;
+        }
+
+        StateHasChanged();
+    }
+
+    private int GetErrorsInTenantName(string input)
+    {
+        int result = 0;
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return 1;
+        }
+
+        if (input.Length > 64)
+        {
+            return 2;
+        }
+
+        return result;
+    }
+
+    private void ValidateNotificationEmailInput(ValidatorEventArgs e)
+    {
+        string rawInput = Convert.ToString(e.Value);
+
+        bool valid = NotificationEmailIsValid(rawInput);
+
+        if (valid)
+        {
+            e.Status = ValidationStatus.Success;
+            _userEmailIsInvalid = false;
+        }
+        else
+        {
+            e.Status = ValidationStatus.Error;
+            e.ErrorText = "Введите адрес электронной почты";
+            _userEmailIsInvalid = true;
+        }
+
+        StateHasChanged();
+    }
+
+    private bool NotificationEmailIsValid(string input)
+    {
+        bool result = false;
+
+        if (!string.IsNullOrWhiteSpace(input))
+        {
+            bool valid = new EmailAddressAttribute().IsValid(input);
+
+            result = valid;
+        }
+
+        return result;
+    }
+
+    private async Task UpdateUserAsync()
+    {
+        bool notificationEmailIsValid = NotificationEmailIsValid(_notificationEmail);
+
+        if (notificationEmailIsValid)
+        {
+            _submitButtonIsLoadingAndDisabled = true;
+            StateHasChanged();
+
+            UserSm destUserSm = new UserSm(_sourceUserSm.Name, _notificationEmail, new UserSettingSm(false));
+
+            if (!_sourceUserSm.Equals(destUserSm))
+            {
+                UserVm userVm = await UserManager.UpdateUserAsync(_sourceUserSm, destUserSm);
+
+                if (userVm != null)
+                {
+                    _sourceUserSm = Mapper.Map<UserSm>(userVm);
+                    _notificationEmail = userVm.Email;
+
+                    Toaster.Success("Пользователь обновлён");
+                }
+            }
+
+            _submitButtonIsLoadingAndDisabled = false;
+        }
+        else
+        {
+            _userValidation.ValidateAll();
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task UpdateTenantAsync()
+    {
+        int errorsInTenantName = GetErrorsInTenantName(_tenantName);
+
+        if (errorsInTenantName == 0)
+        {
+            _submitButtonIsLoadingAndDisabled = true;
+            StateHasChanged();
+
+            TenantSm destTenantSm = new TenantSm(_tenantName);
+
+            if (!_sourceTenantSm.Equals(destTenantSm))
+            {
+                TenantVm tenantVm = await UserManager.UpdateTenantAsync(_sourceTenantSm, destTenantSm);
+
+                if (tenantVm != null)
+                {
+                    _sourceTenantSm = Mapper.Map<TenantSm>(tenantVm);
+                    _tenantName = tenantVm.Name;
+                    _tenant = tenantVm;
+
+                    Toaster.Success("Аккаунт обновлён");
+                }
+            }
+
+            _submitButtonIsLoadingAndDisabled = false;
+        }
+        else
+        {
+            _tenantValidation.ValidateAll();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnSelectedTabChanged(string name)
+    {
+        _tabName = name;
+        _breadcrumbTabName = $"/options/{name}";
+
+        Navigation.NavigateTo($"/options/{name}");
+    }
+
+    private void ShowInviteTenantUserModal()
+    {
+        _inviteUserToTenantModal.Show();
+    }
+
+    private void OnInvitationAddedCallbackHandler(object args)
+    {
+        if (args is InvitationVm inviteVm)
+        {
+            Toaster.Success("Приглашение добавлено");
+        }
+    }
+
+    private void OnApiCallCompletedCallback(ApiCallCompletedEventArgs args)
+    {
+        //skip 404?
+        PageUserWarning.Update(args.Status, args.Error, args.RequestId);
+    }
+
+    private void OnInviteDeletedCallbackHandler(object args)
+    {
+        if (args is string emptyString)
+        {
+            Toaster.Success("Приглашение удалено");
+        }
+    }
+
+    private void OnMembershipDeletedCallbackHandler(object args)
+    {
+        if (args is string emptyString)
+        {
+            Toaster.Success("Доступ пользователя удалён");
+        }
+    }
+
+    public void Dispose()
+    {
+        ApiRepository.ApiCallCompleted -= _apiCallCompletedHandler;
+    }
+}

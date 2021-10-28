@@ -1,0 +1,120 @@
+﻿
+@using YA.WebClient.Application.Models.ViewModels
+
+@typeparam TItem
+
+<Pagination Margin="Margin.Is0" Size="Size.Large" Alignment="Alignment.None">
+    @if (Pages != null)
+    {
+        <PaginationItem @bind-Disabled="@_paginationFirstPageDisabled">
+            @if (!_paginationFirstPageDisabled)
+            {
+                <PaginationLink Class="pagination-button-enabled"
+                                Clicked="@(async () => await OnGetPageCallback.InvokeAsync(Pages.PageInfo.FirstPageUrl))">
+                    <Icon Name="@("fa-angle-double-left")" />
+                </PaginationLink>
+            }
+            else
+            {
+                <PaginationLink Class="pagination-button">
+                    <Icon Name="@("fa-angle-double-left")" />
+                </PaginationLink>
+            }
+        </PaginationItem>
+        <PaginationItem @bind-Disabled="@_paginationPreviousPageDisabled">
+            @if (!_paginationPreviousPageDisabled)
+            {
+                <PaginationLink Class="pagination-button-enabled"
+                                Clicked="@(async () => await OnGetPageCallback.InvokeAsync(Pages.PageInfo.PreviousPageUrl))">
+                    <Icon Name="@("fa-angle-left")" />
+                </PaginationLink>
+            }
+            else
+            {
+                <PaginationLink Class="pagination-button">
+                    <Icon Name="@("fa-angle-left")" />
+                </PaginationLink>
+            }
+        </PaginationItem>
+        <PaginationItem @bind-Disabled="@_paginationNextPageDisabled">
+            @if (!_paginationNextPageDisabled)
+            {
+                <PaginationLink Class="pagination-button-enabled"
+                                Clicked="@(async () => await OnGetPageCallback.InvokeAsync(Pages.PageInfo.NextPageUrl))">
+                    <Icon Name="@("fa-angle-right")" />
+                </PaginationLink>
+            }
+            else
+            {
+                <PaginationLink Class="pagination-button">
+                    <Icon Name="@("fa-angle-right")" />
+                </PaginationLink>
+            }
+        </PaginationItem>
+        <PaginationItem @bind-Disabled="@_paginationLastPageDisabled">
+            @if (!_paginationLastPageDisabled)
+            {
+                <PaginationLink Class="pagination-button-enabled"
+                                Clicked="@(async () => await OnGetPageCallback.InvokeAsync(Pages.PageInfo.LastPageUrl))">
+                    <Icon Name="@("fa-angle-double-right")" />
+                </PaginationLink>
+            }
+            else
+            {
+                <PaginationLink Class="pagination-button">
+                    <Icon Name="@("fa-angle-double-right")" />
+                </PaginationLink>
+            }
+        </PaginationItem>
+    }
+    else
+    {
+        <PaginationItem Disabled="true">
+            <PaginationLink Class="pagination-button">
+                <Icon Name="@("fa-angle-double-left")" />
+            </PaginationLink>
+        </PaginationItem>
+        <PaginationItem Disabled="true">
+            <PaginationLink Class="pagination-button">
+                <Icon Name="@("fa-angle-left")" />
+            </PaginationLink>
+        </PaginationItem>
+        <PaginationItem Disabled="true">
+            <PaginationLink Class="pagination-button">
+                <Icon Name="@("fa-angle-right")" />
+            </PaginationLink>
+        </PaginationItem>
+        <PaginationItem Disabled="true">
+            <PaginationLink Class="pagination-button">
+                <Icon Name="@("fa-angle-double-right")" />
+            </PaginationLink>
+        </PaginationItem>
+    }
+</Pagination>
+
+@code
+{
+    [Parameter]
+    public PaginatedResultVm<TItem> Pages { get; set; }
+
+    [Parameter]
+    public EventCallback<Uri> OnGetPageCallback { get; set; }
+
+    private bool _paginationFirstPageDisabled;
+    private bool _paginationPreviousPageDisabled;
+    private bool _paginationNextPageDisabled;
+    private bool _paginationLastPageDisabled;
+
+    protected override void OnParametersSet()
+    {
+        if (Pages != null)
+        {
+            _paginationFirstPageDisabled = Pages.TotalCount > Pages.Items.Count && Pages.PageInfo.HasPreviousPage == true
+                ? false : true;
+            _paginationPreviousPageDisabled = Pages.PageInfo.HasPreviousPage ? false : true;
+            _paginationNextPageDisabled = Pages.PageInfo.HasNextPage ? false : true;
+            _paginationLastPageDisabled = Pages.TotalCount > Pages.Items.Count && Pages.PageInfo.HasNextPage == true 
+                ? false : true;
+        }
+    }
+}

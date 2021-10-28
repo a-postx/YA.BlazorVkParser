@@ -1,0 +1,60 @@
+﻿@using System.ComponentModel
+
+<Modal @ref="_modal" Closing="@OnModalClosing" ShowBackdrop="true">
+    <ModalContent Centered="true" Size="ModalSize.Default">
+        <ModalHeader>
+            <ModalTitle>Ошибка</ModalTitle>
+        </ModalHeader>
+        <ModalBody MaxHeight="65">
+            <Field Margin="Margin.Is2">
+                <div class="unselectable d-inline-block">
+                    <Icon Name="@("fa-exclamation-triangle")" Style="color:red" />
+                </div>
+                <div class="d-inline-block">
+                    <Text>@ErrorText</Text>
+                </div>
+            </Field>
+        </ModalBody>
+        <ModalFooter>
+            <Button Size="Size.Small" Color="Color.Secondary" Clicked="OnModalClose">Закрыть</Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+@code
+{
+    [Parameter]
+    public string ErrorText { get; set; }
+
+    private Modal _modal;
+
+    private bool closeButtonPressed;
+
+    protected override void OnInitialized()
+    {
+
+    }
+
+    public void Show()
+    {
+        _modal.Show();
+    }
+
+    private void OnModalClosing(CancelEventArgs e)
+    {
+        if (!closeButtonPressed)
+        {
+            e.Cancel = true;
+        }
+        else
+        {
+            closeButtonPressed = false;
+        }
+    }
+
+    private void OnModalClose()
+    {
+        closeButtonPressed = true;
+        _modal.Hide();
+    }
+}

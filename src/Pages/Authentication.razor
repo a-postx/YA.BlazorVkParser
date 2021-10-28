@@ -1,0 +1,118 @@
+﻿@page "/authentication/{action}"
+
+@layout AuthenticationLayout
+
+@using YA.WebClient.Options
+@using YA.WebClient.Application.Interfaces
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using YA.WebClient.Infrastructure.Authentication
+@using YA.WebClient.Extensions
+
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject ISignService SignService
+@inject OauthOptions OauthOptions
+
+
+<RemoteAuthenticatorViewCore TAuthenticationState="CustomRemoteAuthenticationState"
+                             AuthenticationState="AuthenticationState"
+                             OnLogInSucceeded="@((state) => OnLoginSucceeded(state))"
+                             OnLogOutSucceeded="@((state) => OnLogoutSucceeded(state))"
+                             Action="@Action">
+    <LoggingIn>
+        <LayoutView Layout="typeof(LoadingLayout)">
+            <div><Text Style="font-size:12px">входим...</Text></div>
+        </LayoutView>
+    </LoggingIn>
+    <CompletingLoggingIn>
+        <LayoutView Layout="typeof(LoadingLayout)">
+            <div><Text Style="font-size:12px">прибираем...</Text></div>
+        </LayoutView>
+    </CompletingLoggingIn>
+    <LogInFailed Context="context">
+        <LayoutView Layout="typeof(EmptyLayout)">
+            <h2>Что-то пошло не так :(</h2>
+            <p>При попытке входа в систему произошла ошибка: @context</p>
+            <br />
+            <Blazorise.Link To="authentication/login">Войти повторно</Blazorise.Link>
+        </LayoutView>
+    </LogInFailed>
+    @* не используем (authentication/logout) т.к. необходимо асинхронное исполнение *@
+    <LogOut>
+        <LayoutView Layout="typeof(LoadingLayout)">
+            <div><Text Style="font-size:12px">выходим...</Text></div>
+        </LayoutView>
+        @{
+            var authority = OauthOptions.Authority;
+            var clientId = OauthOptions.ClientId;
+            //также можно добавить &returnTo={BaseAddress.Url}authentication/logged-out
+            Navigation.NavigateTo($"{authority}/v2/logout?client_id={clientId}");
+        }
+    </LogOut>
+    <CompletingLogOut>
+        <LayoutView Layout="typeof(LoadingLayout)">
+            <div><Text Style="font-size:12px">ура, мы почти вышли...</Text></div>
+        </LayoutView>
+    </CompletingLogOut>
+    <LogOutSucceeded>
+        <LayoutView Layout="typeof(EmptyLayout)">
+            <h2>Выполнен выход.</h2>
+            <br />
+            <Blazorise.Link To="authentication/login">Войти повторно</Blazorise.Link>
+        </LayoutView>
+    </LogOutSucceeded>
+    <LogOutFailed >
+        <LayoutView Layout="typeof(EmptyLayout)">
+            <h2>Что-то пошло не так :(</h2>
+            <p>При попытке выхода из системы произошла ошибка: @context</p>
+        </LayoutView>
+    </LogOutFailed>
+    <Registering>
+        <div>Регистрация пользователя.</div>
+    </Registering>
+    <UserProfile>
+        <div>Профиль пользователя.</div>
+    </UserProfile>
+</RemoteAuthenticatorViewCore>
+
+@code
+{
+    [Parameter]
+    public string Action { get; set; }
+
+    public CustomRemoteAuthenticationState AuthenticationState { get; set; } = new CustomRemoteAuthenticationState();
+
+    // !!! Использование переопределённых методов приводит к повторному запросу токена и ошибке после логина
+
+    private string GetErrorMessage()
+    {
+        string result = string.Empty;
+
+        Uri uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+
+        if (Navigation.TryGetQueryString<string>("message", out string message))
+        {
+            result = message;
+        }
+
+        return result;
+    }
+
+    //private ValueTask RedirectToPage()
+    //{
+    //    ////return JS.InvokeVoidAsync("location.replace", Navigation.ToAbsoluteUri("/loginlanding").ToString());
+    //    return JS.InvokeVoidAsync("Blazor.navigateTo", Navigation.ToAbsoluteUri("/tenantcreation").ToString(), false, true);
+    //}
+
+    public async Task OnLoginSucceeded(CustomRemoteAuthenticationState state)
+    {
+        await JS.ConsoleLog("урл перенаправления при событии входа: " + state.ReturnUrl);
+
+        await JS.ConsoleLog("значение, сохранённое до аутентификации (напр. партнёрская ссылка): " + state.PartnerLink);
+    }
+
+    public async Task OnLogoutSucceeded(CustomRemoteAuthenticationState state)
+    {
+        await JS.ConsoleLog("урл перенаправления при событии выхода: " + state.ReturnUrl);
+    }
+}

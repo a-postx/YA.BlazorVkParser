@@ -1,0 +1,66 @@
+﻿@using YA.WebClient.Extensions
+@using YA.WebClient.Application.Events
+@using YA.WebClient.Application.Interfaces
+
+@inject IJSRuntime JS
+@inject INotificationsPanelState PanelState
+
+@implements IDisposable
+
+<div class="notificationspanel" style="width:@_width">
+    <Field ColumnSize="ColumnSize.Is12" Class="d-flex">
+        <Field ColumnSize="ColumnSize.Is10">
+            <h5 class="pt-2">Уведомления</h5>
+        </Field>
+        <Field ColumnSize="ColumnSize.Is2" Class="pl-0">
+            <Button Style="width:26px;padding-left:2px;padding-right:2px;margin-left:10px;margin-right:10px;margin-top:2px"
+                Clicked="@(() => UpdateVisibility(false))">
+                <ChildContent>
+                    <BarIcon IconName="IconName.Times" Style="font-size:18px" />
+                </ChildContent>
+            </Button>
+        </Field>
+    </Field>
+    <Field ColumnSize="ColumnSize.Is12">
+        <Field Style="height:3rem;" Display="Display.Block">
+            <div class="centered text-muted d-flex justify-content-center align-items-center">
+                Нет новых уведомлений
+            </div>
+        </Field>
+    </Field>
+</div>
+
+
+@code
+{
+    private string _width = "0px";
+
+    protected EventHandler<NotificationsPanelVisibilityChangedEventArgs> _visibilityUpdatedHandler;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        _visibilityUpdatedHandler = (s, e) => SetPanelVisibility(e);
+        PanelState.VisibilityUpdated += _visibilityUpdatedHandler;
+
+        await base.OnInitializedAsync();
+    }
+
+    private void SetPanelVisibility(NotificationsPanelVisibilityChangedEventArgs args)
+    {
+        _width = args.Visible ? "300px" : "0px";
+
+        StateHasChanged();
+    }
+
+    private void UpdateVisibility(bool visible)
+    {
+        PanelState.UpdateVisibility(visible);
+    }
+
+    public void Dispose()
+    {
+        PanelState.VisibilityUpdated -= _visibilityUpdatedHandler;
+        PanelState.Dispose();
+    }
+}

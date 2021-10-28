@@ -1,0 +1,367 @@
+﻿@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Models.SaveModels
+@using System.Linq
+@using Microsoft.AspNetCore.JsonPatch
+@using YA.WebClient.Constants
+@using YA.WebClient.Application
+
+@inject IRuntimeState RuntimeState
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject ISignService SignService
+@inject IYaSessionStorage YaSessionStorage
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IApiRepository ApiRepository
+@inject ITokenService TokenService
+
+
+@implements IDisposable
+
+@attribute [Authorize]
+
+<CascadingValue Value=this>
+    @ChildContent
+</CascadingValue>
+
+@code
+{
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    public event EventHandler UserChanged;
+
+    private AuthenticationStateChangedHandler _authStateChangedHandler;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        string currRelUrl = Navigation.ToBaseRelativePath(Navigation.Uri);
+
+        if (currRelUrl != "authentication/logged-out" && !currRelUrl.StartsWith("join-team"))
+        {
+            await RetrieveUserAsync();
+        }
+
+        _authStateChangedHandler = async (args) => await AuthStateChangedHandler(args);
+        AuthStateProvider.AuthenticationStateChanged += _authStateChangedHandler;
+    }
+
+    private void NotifyUserChanged()
+    {
+        UserChanged?.Invoke(this, null);
+        StateHasChanged();
+    }
+
+    private async Task AuthStateChangedHandler(Task<AuthenticationState> stateTask)
+    {
+        await JS.ConsoleLog("обработка изменения состояния аутентификации");
+
+        AuthenticationState state = await stateTask;
+
+        if (state?.User?.Identity?.IsAuthenticated ?? false)
+        {
+            await RetrieveUserAsync();
+        }
+        else
+        {
+            //перенаправить на логин?
+        }
+    }
+
+    private async Task RetrieveUserAsync()
+    {
+        await JS.ConsoleLog("определяем пользователя");
+
+        (UserVm userVm, string error, Guid requestId) = await GetUserAsync(true);
+
+        //проблема: если не выгонять пользователя, то будет возможно работать без инфы об арендаторе
+        //если выгонять пользователя, то приложение будет недоступно при отсутствии UserWorker
+        if (userVm != null)
+        {
+            await JS.ConsoleLog("ИД пользователя " + userVm.UserID);
+            await JS.ConsoleLog("текущий урл " + Navigation.Uri);
+
+            await UpdateRuntimeStateAsync(userVm);
+
+            await PickAndAddTenantMembershipAsync();
+
+            NotifyUserChanged();
+        }
+        else if (userVm == null && error == "Пользователь не найден.")
+        {
+            await JS.ConsoleLog("пользователь не найден");
+
+            string accessToken = await TokenService.GetTokenAsync();
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                UserRegistrationInfoSm regInfoSm = new UserRegistrationInfoSm { AccessToken = accessToken };
+
+                Guid tenantInvitationId = await YaSessionStorage.GetTenantInvitationAsync();
+
+                if (tenantInvitationId != Guid.Empty)
+                {
+                    regInfoSm.JoinTeamToken = tenantInvitationId;
+                }
+
+                //вызов должен быть последним в цикле аутентификации, иначе не произойдёт перенаправление на регистрацию пользователя
+                (UserVm createdUserVm, string callError, Guid createReqId) = await CreateUserAsync(regInfoSm);
+
+                if (createdUserVm != null)
+                {
+                    await JS.ConsoleLog("пользовательская инфраструктура создана");
+
+                    await YaSessionStorage.RemoveCurrentOidcTokensAsync();
+
+                    //при АПИ-запросе и отсутствии токена в хранилище сессии фреймворк делает запрос на свежий токен
+                    await GetFreshUserAndUpdateStateAsync();
+                }
+                else
+                {
+                    await JS.Alert("Не удалось создать пользователя.");
+                    await SignService.BeginLogoutAsync();
+                }
+            }
+            else
+            {
+                await JS.Alert("Токен доступа не найден.");
+                await SignService.BeginLogoutAsync();
+            }
+        }
+        else if (userVm == null && error == "Не авторизован.")
+        {
+            //токен очищен и должна начаться (или уже происходит) процедура логина 
+            await JS.ConsoleLog($"пользователь не авторизован, идентификатор запроса: {requestId}");
+        }
+        else
+        {
+            await JS.Alert($"Непонятки с пользователем. Идентификатор запроса: {requestId}");
+            await SignService.BeginLogoutAsync();
+        }
+    }
+
+    private async Task UpdateRuntimeStateAsync(UserVm user)
+    {
+        RuntimeState.PutUser(user);
+
+        if (user.Tenants.Count > 0)
+        {
+            RuntimeState.PutTenants(user.Tenants);
+
+            Guid currentTenantId = await TokenService.GetTenantIdAsync();
+
+            if (currentTenantId != Guid.Empty)
+            {
+                TenantVm currentTenant = user.Tenants
+                    .Where(e => e.TenantId == currentTenantId).FirstOrDefault();
+
+                if (currentTenant is not null)
+                {
+                    currentTenant.Current = true;
+
+                    RuntimeState.PutTenant(currentTenant);
+
+                    if (currentTenant.Memberships.Count > 0)
+                    {
+                        MembershipVm currentMembership = currentTenant.Memberships
+                            .Where(e => e.User?.UserID == user.UserID).FirstOrDefault();
+
+                        if (currentMembership is not null)
+                        {
+                            RuntimeState.PutMembership(currentMembership);
+                            await JS.ConsoleLog("права доступа к арендатору: " + currentMembership.AccessType.ToString());
+                        }
+                    }
+
+                    if (currentTenant.PricingTier != null)
+                    {
+                        RuntimeState.PutPricingTier(currentTenant.PricingTier);
+                    }
+                }
+                else
+                {
+                    await JS.ConsoleLog("текущий арендатор не найден среди доступных");
+                }
+            }
+            else
+            {
+                //показать диалог выбора арендатора?
+                await JS.ConsoleLog("текущий арендатор не найден в токене");
+            }
+        }
+    }
+
+    public MembershipAccessType GetAccessLevel()
+    {
+        MembershipVm membership = RuntimeState.GetMembership();
+
+        return (membership is not null) ? membership.AccessType : MembershipAccessType.None;
+    }
+
+    public async Task RefreshStateAsync()
+    {
+        await RetrieveUserAsync();
+    }
+
+    public UserVm GetUser()
+    {
+        return RuntimeState.GetUser();
+    }
+
+    public UserSettingVm GetUserSettings()
+    {
+        return RuntimeState.GetUser()?.Settings;
+    }
+
+    public TenantVm GetTenant()
+    {
+        return RuntimeState.GetTenant();
+    }
+
+    public ICollection<TenantVm> GetTenants()
+    {
+        return RuntimeState.GetTenants();
+    }
+
+    public async Task<UserVm> UpdateUserAsync(UserSm sourceModel, UserSm destinationModel, bool background = true)
+    {
+        JsonPatchDocument<UserSm> patch = PatchProducer.GetPatchForUser(sourceModel, destinationModel);
+
+        ApiCommandResult<UserVm> result = await ApiRepository.UpdateCurrentUser(patch, background);
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                RuntimeState.PutUser(result.Data);
+                return result.Data;
+            case ApiCommandStatus.NotFound:
+            default:
+                return null;
+        }
+    }
+
+    public async Task<TenantVm> UpdateTenantAsync(TenantSm sourceModel, TenantSm destinationModel, bool background = true)
+    {
+        JsonPatchDocument<TenantSm> patch = PatchProducer.GetPatchForTenant(sourceModel, destinationModel);
+
+        ApiCommandResult<TenantVm> result = await ApiRepository.UpdateCurrentTenant(patch, background);
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                result.Data.Current = true;
+                RuntimeState.PutTenant(result.Data);
+                return result.Data;
+            case ApiCommandStatus.NotFound:
+            default:
+                return null;
+        }
+    }
+
+    private async Task<(UserVm, string, Guid)> CreateUserAsync(UserRegistrationInfoSm accessInfo)
+    {
+        AuthenticationState state = await AuthStateProvider.GetAuthenticationStateAsync();
+
+        string userId = state.User.Claims.FirstOrDefault(claim => claim.Type == CustomClaimNames.sub)?.Value;
+        string userEmail = state.User.Claims.FirstOrDefault(claim => claim.Type == CustomClaimNames.email)?.Value;
+        string emailVerified = state.User.Claims.FirstOrDefault(claim => claim.Type == CustomClaimNames.email_verified)?.Value;
+
+        bool gotEmailVerification = bool.TryParse(emailVerified, out bool gotVerificationResult);
+        bool isActive = gotEmailVerification && gotVerificationResult;
+
+        if (!string.IsNullOrEmpty(userId))
+        {
+            await JS.ConsoleLog("создаём пользователя " + userId);
+
+            ApiCommandResult<UserVm> result = await ApiRepository.CreateUser(accessInfo);
+
+            switch (result.Status)
+            {
+                case ApiCommandStatus.Ok:
+                    await JS.ConsoleLog("пользователь создан: " + result.Data.UserID);
+                    return (result.Data, string.Empty, Guid.Empty);
+                default:
+                    await JS.ConsoleLog("ошибка создания пользователя: " + result.ErrorText);
+                    return (null, result.ErrorText, result.RequestId);
+            }
+        }
+        else
+        {
+            return (null, "Ошибка создания пользователя: идентификатор пуст", Guid.Empty);
+        }
+    }
+
+    private async Task GetFreshUserAndUpdateStateAsync()
+    {
+        (UserVm userVm, string userError, Guid reqId) = await GetUserAsync(true);
+
+        if (userVm != null)
+        {
+            await UpdateRuntimeStateAsync(userVm);
+
+            NotifyUserChanged();
+        }
+        else
+        {
+            await JS.Alert("Пользователь не найден.");
+        }
+    }
+
+    private async Task<(UserVm, string, Guid)> GetUserAsync(bool background = false)
+    {
+        ApiCommandResult<UserVm> result = await ApiRepository.GetCurrentUser(background);
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                return (result.Data, string.Empty, Guid.Empty);
+            case ApiCommandStatus.NotFound:
+                return (null, "Пользователь не найден.", result.RequestId);
+            case ApiCommandStatus.Unauthorized:
+                //нормальный ответ при смене арендатора
+                return (null, "Не авторизован.", result.RequestId);
+            default:
+                await JS.ConsoleLog("ошибка получения пользователя: " + result.ErrorText);
+                return (null, "Ошибка получения пользователя: " + result.ErrorText, result.RequestId);
+        }
+    }
+
+    public async Task PickAndAddTenantMembershipAsync()
+    {
+        Guid tenantInvitationId = await YaSessionStorage.GetTenantInvitationAsync();
+
+        if (tenantInvitationId != Guid.Empty)
+        {
+            ApiCommandResult<MembershipVm> result = await ApiRepository.CreateMembership(tenantInvitationId);
+
+            switch (result.Status)
+            {
+                case ApiCommandStatus.Ok:
+                    break;
+                //доделать когда будут возвращаться детали проблемы
+                ////case ApiCommandStatus.UnprocessableEntity:
+                ////    await JS.Alert("Не удалось добавить аккаунт: пользователь уже является членом этой команды.");
+                ////    break;
+
+                case ApiCommandStatus.NotFound:
+                    await JS.Alert("Не удалось добавить аккаунт: приглашение не найдено.");
+                    break;
+
+                default:
+                    await JS.Alert("Не удалось добавить аккаунт.");
+                    break;
+            }
+
+            await YaSessionStorage.RemoveTenantInvitationAsync();
+
+            await GetFreshUserAndUpdateStateAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        AuthStateProvider.AuthenticationStateChanged -= _authStateChangedHandler;
+    }
+}

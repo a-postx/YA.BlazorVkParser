@@ -1,0 +1,74 @@
+﻿@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application
+
+@inject IApiRepository ApiRepository
+@inject IVkTokenService VkTokenService
+@inject IRuntimeState RuntimeState
+@inject IJSRuntime JS
+
+<Alert Padding="Padding.Is2"
+       Color="Color.Info"
+       Dismisable="false"
+       Visible="(_requestCompleted && !_errorGettingVkSnConnection && _accessToken == null) ? true : false">
+    <Paragraph Padding="Padding.Is0" Margin="Margin.Is2.FromTop.Is2.FromBottom" Style="font-size:small">
+        <div class="mr-2 p-0 d-inline-block">
+            <Icon Name="IconName.ExclamationCircle" TextColor="TextColor.Warning" /> Для работы этого раздела требуется авторизация во ВКонтакте
+        </div>
+        @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+           || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner))
+        {
+            <div class="d-inline-block">
+                <Button Size="Size.Small" Color="Color.Success" Clicked="@(() => VkTokenService.GetVkCode(AppReturnAddress))">
+                    <Icon Name="IconName.Key"></Icon> Подключить
+                </Button>
+            </div>
+        }
+    </Paragraph>
+</Alert>
+
+@code
+{
+    [Parameter]
+    public string AppReturnAddress { get; set; }
+
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private bool _requestCompleted;
+    private bool _errorGettingVkSnConnection;
+    private VkAccessTokenVm _accessToken;
+
+    protected override async Task OnInitializedAsync()
+    {
+        VkAccessTokenVm cachedTokenVm = RuntimeState.GetVkAccessToken();
+
+        if (cachedTokenVm != null)
+        {
+            _accessToken = cachedTokenVm;
+        }
+        else
+        {
+            ApiCommandResult<VkAccessTokenVm> result = await ApiRepository.GetVkAccessToken();
+
+            switch (result.Status)
+            {
+                case ApiCommandStatus.Ok:
+                    RuntimeState.AddVkAccessToken(result.Data);
+                    _accessToken = result.Data;
+                    break;
+
+                case ApiCommandStatus.NotFound:
+                    RuntimeState.RemoveVkAccessToken();
+                    break;
+
+                default:
+                    _errorGettingVkSnConnection = true;
+                    break;
+            }
+        }
+
+        _requestCompleted = true;
+    }
+}

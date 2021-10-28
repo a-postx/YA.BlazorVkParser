@@ -1,0 +1,51 @@
+﻿@page "/"
+
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Extensions
+
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<div><Text Style="font-size:12px">последний штрих...</Text></div>
+
+@layout LoadingLayout
+
+@implements IDisposable
+
+@attribute [Authorize]
+
+@code
+{
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private EventHandler _userChangedHandler;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userChangedHandler = async (s, args) => await UserChangedHandler();
+        UserManager.UserChanged += _userChangedHandler;
+
+        await base.OnInitializedAsync();
+    }
+
+    private async Task UserChangedHandler()
+    {
+        UserSettingVm userSettings = UserManager.GetUserSettings();
+
+        if (userSettings is not null)
+        {
+            Navigation
+                .NavigateTo(userSettings.ShowGettingStarted ? $"/intro?returnUrl={Navigation.BaseUri}home" : "/home");
+        }
+        else
+        {
+            await JS.ConsoleLog("настройки пользователя не определены");
+        }
+    }
+
+    public void Dispose()
+    {
+        UserManager.UserChanged -= _userChangedHandler;
+    }
+}

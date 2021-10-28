@@ -1,0 +1,126 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Венандо - парсер групп ВКонтакте</title>
+    <base href="/" />
+    <link href="css/site.css" rel="stylesheet" asp-append-version="true" />
+
+    <link href="_content/BlazorPro.Spinkit/spinkit.min.css" rel="stylesheet" />
+
+    <!-- Blazorise -->
+    <!--<link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.12.0/css/all.css">
+    <link href="_content/Blazorise/blazorise.css" rel="stylesheet" />
+    <link href="_content/Blazorise.Bootstrap/blazorise.bootstrap.css" rel="stylesheet" />
+    <link href="_content/Blazorise.Sidebar/blazorise.sidebar.css" rel="stylesheet" />
+    <!-- /Blazorise -->
+
+    <link href="_content/Sotsera.Blazor.Toaster/toastr.min.css" rel="stylesheet" />
+
+    <link href="_content/Blazored.Typeahead/blazored-typeahead.css" rel="stylesheet" />
+
+    <link href="css/bootstrap-override.css" rel="stylesheet" asp-append-version="true" />
+
+    <!-- Custom -->
+    <script src="js/environmentInfo.js" asp-append-version="true"></script>
+    <script src="js/blazordownloadfile.js" asp-append-version="true"></script>
+    <!-- /Custom -->
+    <!--Video-->
+    <link href="https://vjs.zencdn.net/7.14.3/video-js.css" rel="stylesheet" />
+    <!--/Video-->
+</head>
+
+<body>
+    <app>
+        <div class="loading-overlay">
+            <div class="sk-wave">
+                <div class="sk-wave-rect"></div>
+                <div class="sk-wave-rect"></div>
+                <div class="sk-wave-rect"></div>
+                <div class="sk-wave-rect"></div>
+                <div class="sk-wave-rect"></div>
+            </div>
+            <div style="font-size:12px">загрузка...</div>
+        </div>
+    </app>
+
+    <div id="blazor-error-ui">
+        Упс, произошла ошибка! Приложение может работать некорректно пока вы его не перезагрузите.
+        <a href="/" class="reload" rel="nofollow">Перезагрузить</a>
+        <a href="#" class="dismiss" rel="nofollow">🗙</a>
+    </div>
+
+    <!-- Blazorise -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.min.js" integrity="sha384-+YQ4JLhjyBLPDQt//I+STsc9iw4uQqACwlvpslubQzn4u2UU2UFM80nGisd026JF" crossorigin="anonymous"></script>
+    <script src="_content/Blazorise/blazorise.js"></script>
+    <script src="_content/Blazorise.Bootstrap/blazorise.bootstrap.js"></script>
+    <script src="_content/Blazorise.DataGrid/blazorise.datagrid.js"></script>
+    <!-- /Blazorise -->
+
+    <script src="_content/Microsoft.AspNetCore.Components.WebAssembly.Authentication/AuthenticationService.js"></script>
+    <script src="_framework/blazor.webassembly.js" autostart="false"></script>
+
+    <script src="_content/Blazored.Typeahead/blazored-typeahead.js"></script>
+    <script src="_content/CurrieTechnologies.Razor.PageVisibility/pagevisibility.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/ua-parser-js@0/dist/ua-parser.min.js"></script>
+
+    <!-- video.js -->
+    <script src="https://vjs.zencdn.net/7.14.3/video.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/videojs-youtube/2.6.1/Youtube.min.js"></script>
+    <script src="js/videoplayer.js" asp-append-version="true"></script>
+    <!-- /video.js -->
+
+    <!-- Browser support -->
+    <script>
+        const webassemblySupported = (function () {
+            try {
+                if (typeof WebAssembly === "object"
+                    && typeof WebAssembly.instantiate === "function") {
+                    const module = new WebAssembly.Module(
+                        Uint8Array.of(0x0, 0x61, 0x73, 0x6d,
+                            0x01, 0x00, 0x00, 0x00));
+                    if (module instanceof WebAssembly.Module)
+                        return new WebAssembly.Instance(module)
+                            instanceof WebAssembly.Instance;
+                }
+            }
+            catch (e) {
+            }
+            return false;
+        })();
+
+        if (webassemblySupported) {
+            Blazor.start({});
+        }
+        else {
+            window.location = window.location + "BrowserNotSupported.html";
+        }
+    </script>
+    <!-- /Browser support -->
+    <!-- Chatra {literal} -->
+    <script>
+        window.ChatraSetup = {
+            startHidden: true
+        };
+        (function (d, w, c) {
+            w.ChatraID = '9Fff8PkPWdEwP6fAG';
+            var s = d.createElement('script');
+            w[c] = w[c] || function () {
+                (w[c].q = w[c].q || []).push(arguments);
+            };
+            s.async = true;
+            s.src = 'https://call.chatra.io/chatra.js';
+            if (d.head) d.head.appendChild(s);
+        })(document, window, 'Chatra');
+    </script>
+    <!-- /Chatra {/literal} -->
+</body>
+
+</html>

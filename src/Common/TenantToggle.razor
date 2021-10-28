@@ -1,0 +1,170 @@
+﻿@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Services
+@using YA.WebClient.Application.Events
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Extensions
+@using YA.WebClient.Application
+
+@inject IJSRuntime JS
+@inject IThemeOptionsState ThemeOptions
+@inject NavigationManager Navigation
+@inject LoadingModalService LoadingModal
+@inject IRuntimeState RuntimeState
+@inject IYaSessionStorage YaSessionStorage
+@inject IApiRepository ApiRepository
+@inject IApiHttpContext ApiHttpContext
+
+@implements IDisposable
+
+<AuthorizeView>
+    <Authorized>
+        @if (_userTenants is not null)
+        {
+            <TenantSelectionModal @ref="_tenantSelectionModal"
+                                  AvailableTenants="@_userTenants"
+                                  OnTenantSelectedCallback="OnTenantSelectedCallbackHandler" />
+
+            <BarDropdown>
+                <BarDropdownToggle @bind-Style="@ThemeOptions.UserToggleBackgroundColorStyle">
+                    <div class="d-inline-block unselectable">
+                        <Text Margin="Margin.Is1.FromRight" Class="d-inline-block" Style="margin-top:2px" Color="TextColor.Light">
+                            <Icon Name="@("fa-flag")" IconStyle="IconStyle.Solid" />
+                        </Text>
+                        <Text Margin="Margin.Is1.FromRight" Class="d-inline-block" Style="margin-top:2px" Color="TextColor.Light">
+                            @if (_currentTenant is not null)
+                            {
+                                @_currentTenant.Name
+                            }
+                            else
+                            {
+                                <Text>~выберите аккаунт~</Text>
+                            }
+                        </Text>
+                    </div>
+                </BarDropdownToggle>
+                <BarDropdownMenu RightAligned="true" Class="dropdown-menu-shadow" Style="font-size:small" Margin="Margin.Is0">
+                    @if (_userTenants != null && _userTenants.Count > 0)
+                    {
+                        @foreach (TenantVm tenant in _userTenants)
+                        {
+                            <DropdownItem Style="cursor:pointer" Clicked="@(() => SwitchToTenantAsync(tenant))">
+                                @if (tenant.Current)
+                                {
+                                    <div style="color:cornflowerblue">
+                                        <span>@tenant.Name</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div>
+                                        <span>@tenant.Name</span>
+                                    </div>
+                                }
+                            </DropdownItem>
+                        }
+                    }
+                </BarDropdownMenu>
+            </BarDropdown>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code
+{
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private TenantVm _currentTenant;
+    private ICollection<TenantVm> _userTenants;
+
+    private EventHandler<TenantsUpdatedEventArgs> _tenantsUpdatedHandler;
+    private EventHandler<EventArgs> _tenantSelectionRequiredHandler;
+
+    private TenantSelectionModal _tenantSelectionModal;
+
+    protected async override Task OnInitializedAsync()
+    {
+        _userTenants = RuntimeState.GetTenants();
+        _currentTenant = GetCurrentTenant();
+
+        _tenantsUpdatedHandler = (s, args) => RefreshTenants(args);
+        RuntimeState.TenantsUpdated += _tenantsUpdatedHandler;
+
+        _tenantSelectionRequiredHandler = (s, args) => ShowTenantSelectionModal();
+        ApiHttpContext.TenantSelectionRequired += _tenantSelectionRequiredHandler;
+
+        await base.OnInitializedAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_userTenants is not null && _currentTenant is null)
+        {
+            ShowTenantSelectionModal();
+        }
+
+        base.OnParametersSet();
+    }
+
+    private void RefreshTenants(TenantsUpdatedEventArgs args)
+    {
+        _userTenants = args.Tenants;
+        _currentTenant = GetCurrentTenant();
+        StateHasChanged();
+    }
+
+    private TenantVm GetCurrentTenant() => _userTenants?.Where(e => e.Current == true).FirstOrDefault();
+
+    private void ShowTenantSelectionModal()
+    {
+        //сразу несколько запросов к АПИ могут сгенерировать событие
+        if (_tenantSelectionModal is not null && !_tenantSelectionModal.IsShowing)
+        {
+            _tenantSelectionModal.Show();
+        }
+    }
+
+    private async Task OnTenantSelectedCallbackHandler(TenantVm tenant)
+    {
+        await SwitchToTenantAsync(tenant);
+    }
+
+    private async Task SwitchToTenantAsync(TenantVm tenant)
+    {
+        if (tenant.Current == false)
+        {
+            LoadingModal.Show();
+
+            ApiCommandResult<string> result = await ApiRepository.SwitchUserTenant(tenant.TenantId);
+
+            switch (result.Status)
+            {
+                case ApiCommandStatus.Ok:
+                    await YaSessionStorage.RemoveCurrentOidcTokensAsync();
+                    //необходимо определять 401, иначе идёт перенаправление и только потом перенаправление на логин 
+                    await UserManager.RefreshStateAsync();
+                    Navigation.NavigateTo("/home");
+                    LoadingModal.Hide();
+                    break;
+                case ApiCommandStatus.NotFound:
+                    await JS.Alert($"Аккаунт {tenant.TenantId} не найден.");
+                    LoadingModal.Hide();
+                    break;
+                case ApiCommandStatus.Unauthorized:
+                    //будет перенаправление на логин-страницу
+                    break;
+                default:
+                    await JS.ConsoleLog($"Ошибка переключения аккаунта.{Environment.NewLine}Идентификатор запроса: {result.RequestId}");
+                    LoadingModal.Hide();
+                    break;
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        RuntimeState.TenantsUpdated -= _tenantsUpdatedHandler;
+        ApiHttpContext.TenantSelectionRequired -= _tenantSelectionRequiredHandler;
+    }
+}

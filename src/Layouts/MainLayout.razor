@@ -1,0 +1,194 @@
+﻿@inherits LayoutComponentBase
+
+@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Models.ViewModels 
+
+@inject IJSRuntime JS
+@inject IThemeOptionsState ThemeOptions
+@inject IWarmupDiService WarmupDiService
+
+<LoadingModal />
+
+<Layout Sider="true">
+    <LayoutSider>
+        <LayoutSiderContent>
+            <Bar Mode="BarMode.VerticalInline"
+                 CollapseMode="BarCollapseMode.Small"
+                 Breakpoint="Breakpoint.Desktop"
+                 NavigationBreakpoint="Breakpoint.Tablet"
+                 Background="Background.None"
+                 @bind-ThemeContrast="_vBarThemeContrast"
+                 @bind-Visible="_sideBarVisible">
+                <BarBrand>
+                    <BarItem Style="font-size:18px">
+                        <BarLink To="">
+                            <BarIcon IconName="customIcon" />
+                            <b>Venando</b>
+                        </BarLink>
+                    </BarItem>
+                </BarBrand>
+                <BarMenu>
+                    <BarStart>
+                        <BarItem>
+                            <BarLink To="home">
+                                <BarIcon IconName="IconName.Home" /> Главная
+                            </BarLink>
+                        </BarItem>
+                        @if (_authState?.User?.Identity?.IsAuthenticated ?? false && _currentTenant is not null)
+                        {
+                            <BarItem>
+                                <BarDropdown>
+                                    <BarDropdownToggle Class="unselectable">
+                                        <BarIcon IconName="IconName.Search" /> Поиск рекламной аудитории
+                                    </BarDropdownToggle>
+                                    <BarDropdownMenu>
+                                        <BarDropdownItem To="parsingtasks/onetime">
+                                            <BarIcon IconName="IconName.ListOl" /> Задания
+                                        </BarDropdownItem>
+                                        <BarDropdownItem To="parsingtasks/periodic">
+                                            <BarIcon IconName="IconName.Clock" /> Периодические задания
+                                        </BarDropdownItem>
+                                    </BarDropdownMenu>
+                                </BarDropdown>
+                            </BarItem>
+                        }
+                    </BarStart>
+                </BarMenu>
+                <BarToggler Style="position:relative" Mode="BarTogglerMode.Normal" />
+            </Bar>
+        </LayoutSiderContent>
+    </LayoutSider>
+    <Layout>
+        <LayoutHeader Fixed="true">
+            <Bar Class="topbar-navlinks px-4"
+                 Breakpoint="Breakpoint.Desktop"
+                 Background="Background.Primary"
+                 @bind-ThemeContrast="_topBarThemeContrast">
+                <BarToggler Style="height:2.75rem;line-height:27px;" />
+                <BarMenu>
+                    <BarStart>
+
+                    </BarStart>
+                    <BarEnd>
+                        <BarItem>
+                            <TenantToggle />
+                        </BarItem>
+                        <BarItem>
+                            <NotificationsPanelToggle />
+                        </BarItem>
+                        <BarItem>
+                            <SupportChat />
+                        </BarItem>
+                        @*<BarItem>
+                            <Check TValue="bool" Checked="@(_barsThemeContrast == ThemeContrast.Light)" CheckedChanged="((s) => OnThemeModeChanged(s))" />
+                        </BarItem>*@
+                        <BarItem>
+                            <UserToggle />
+                        </BarItem>
+                    </BarEnd>
+                </BarMenu>
+            </Bar>
+        </LayoutHeader>
+        <LayoutContent Class="@_bodyClasses" Style="@_bodyStyle">
+            @Body
+        </LayoutContent>
+    </Layout>
+</Layout>
+
+@code
+{
+    [CascadingParameter]
+    protected Theme CurrentTheme { get; set; }
+
+    [CascadingParameter]
+    public Task<AuthenticationState> AuthState { get; set; }
+
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private AuthenticationState _authState;
+    private TenantVm _currentTenant;
+
+    private bool _sideBarVisible = true;
+
+    private ThemeContrast _vBarThemeContrast = ThemeContrast.Dark;
+    private ThemeContrast _topBarThemeContrast = ThemeContrast.Light;
+    private string _bodyClasses = "content";
+    private string _bodyStyle = "color:black";
+
+    RenderFragment customIcon = @<img src="/img/logo_on_dark_32x32.png" style="width:32px;height:32px" />;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await GetAuthStateAsync();
+            _currentTenant = UserManager.GetTenant();
+
+            StateHasChanged();
+
+            await WarmupDiService.WarmUpAllAsync();
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task GetAuthStateAsync()
+    {
+        _authState = await AuthState;
+    }
+
+    //https://anduin.aiursoft.com/post/2020/3/27/bootstrap-dark-theme-minimum-style
+    private void OnThemeModeChanged(bool lightMode)
+    {
+        _vBarThemeContrast = lightMode ? ThemeContrast.Dark : ThemeContrast.Light;
+        _topBarThemeContrast = lightMode ? ThemeContrast.Light : ThemeContrast.Dark;
+        ThemeOptions.Contrast = _vBarThemeContrast;
+
+        if (lightMode)
+        {
+            _bodyClasses = "content px-4";
+            _bodyStyle = "color:black";
+
+            ThemeOptions.ModalContentClass = string.Empty;
+            //таблица не поддерживает атрибутов цвета https://github.com/stsrki/Blazorise/issues/648
+            ThemeOptions.TableClass = string.Empty;
+
+            if (CurrentTheme?.ColorOptions != null)
+            {
+                CurrentTheme.ColorOptions.Primary = "#63B1C7";
+            }
+
+            if (CurrentTheme?.BackgroundOptions != null)
+            {
+                CurrentTheme.BackgroundOptions.Primary = "#63B1C7";
+            }
+
+            ThemeOptions.UserToggleBackgroundColorStyle = "background-color:" + CurrentTheme.ColorOptions.Primary;
+        }
+        else
+        {
+            _bodyClasses = "content px-4 bg-dark";
+            _bodyStyle = "color:white";
+
+            ThemeOptions.ModalContentClass = "bg-dark";
+            ThemeOptions.TableClass = "table-dark";
+
+            if (CurrentTheme?.ColorOptions != null)
+            {
+                CurrentTheme.ColorOptions.Primary = "#F3B1C7";
+            }
+
+            if (CurrentTheme?.BackgroundOptions != null)
+            {
+                CurrentTheme.BackgroundOptions.Primary = "#F3B1C7";
+            }
+
+            ThemeOptions.UserToggleBackgroundColorStyle = "background-color:" + CurrentTheme.ColorOptions.Primary;
+        }
+
+        CurrentTheme.ThemeHasChanged();
+        //тема таблицы не меняется даже после вызова
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,687 @@
+﻿@page "/parsingtasks/periodic"
+
+@using AutoMapper
+@using System.Threading
+@using YA.WebClient.Application
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Extensions
+@using Microsoft.AspNetCore.JsonPatch
+@using YA.WebClient.Application.Models.SaveModels;
+
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IYaToaster Toaster
+@inject IMapper Mapper
+@inject IThemeOptionsState ThemeOptions
+@inject IUiUserSettingsService UiSettings
+@inject PageVisibilityService VisibilityService
+
+@attribute [Authorize]
+
+@inherits BaseParsingTasksPage
+
+@implements IDisposable
+@implements IAsyncDisposable
+
+@* Modals and popups *@
+
+<EditParsingTaskModal @ref="_editTaskModal"
+                      OnTaskSavedCallback="@((args) => OnTaskSavedCallbackHandler(args))" />
+
+<ActionErrorModal @ref="_actionErrorModal" ErrorText="@_actionErrorText" />
+
+@* Page content *@
+
+<NotificationsPanel />
+
+<Breadcrumb Mode="BreadcrumbMode.Auto" Style="background-color:transparent;" Padding="Padding.Is0">
+    <BreadcrumbItem>
+        <BreadcrumbLink To="/home">Главная</BreadcrumbLink>
+    </BreadcrumbItem>
+    <BreadcrumbItem>
+        <BreadcrumbLink To="/parsingtasks/periodic">Периодические задания</BreadcrumbLink>
+    </BreadcrumbItem>
+</Breadcrumb>
+
+<Field>
+    <Heading Size="HeadingSize.Is3" Class="page-heading">
+        <span class="d-inline-block">Периодические задания</span>
+        @if (_vkPeriodicParsingTasks != null)
+        {
+            <span class="text-muted d-inline-block" style="padding-left:5px;font-weight:400">(@_vkPeriodicParsingTasks.TotalCount)</span>
+        }
+    </Heading>
+</Field>
+
+<VkAuthorizationRequired AppReturnAddress="@Navigation.Uri" />
+
+<div>
+    <div class="d-flex justify-content-between flex-wrap">
+        <div style="margin-left:auto">
+            @* при перерисовке после изменения количества элементов на странице в Хроме вылетает ошибка, поэтому дублируем
+                crit: Microsoft.AspNetCore.Components.WebAssembly.Rendering.WebAssemblyRenderer[100]
+                  Unhandled exception rendering component: Cannot read property 'parentNode' of undefined
+                  TypeError: Cannot read property 'parentNode' of undefined
+                  at Object.e [as removeLogicalChild] (https://localhost:5001/_framework/blazor.webassembly.js:1:10320)
+            *@
+            @if (_vkPeriodicParsingTasks != null)
+            {
+                <div class="action-stripe-item">
+                    <PageSizeButton PageSize="_pageSize"
+                                    Disabled="false"
+                                    PageSizeChanged="OnPageSizeChanged" />
+                </div>
+            }
+            else
+            {
+                <div class="action-stripe-item">
+                    <PageSizeButton PageSize="_pageSize"
+                                    Disabled="true"
+                                    PageSizeChanged="OnPageSizeChanged" />
+                </div>
+            }
+            <div class="action-stripe-item">
+                <PaginationButtons @ref="_paginationButtons"
+                                   Pages="_vkPeriodicParsingTasks"
+                                   TItem="VkPeriodicParsingTaskVm"
+                                   OnGetPageCallback="@(async (uri) => await OnGetVkParsingTasksPageAsync(uri))" />
+            </div>
+            <div class="action-stripe-item pr-0">
+                <ListRefreshButton @ref="_taskListRefreshButton"
+                                   InitRefreshInterval="10000"
+                                   OnNeedRefreshCallback="@(async () => await OnRefreshParsingTasksList())" />
+            </div>
+        </div>
+    </div>
+
+    <Table Borderless="false"
+           Margin="Margin.IsAuto"
+           Hoverable="_vkPeriodicParsingTasks == null || _vkPeriodicParsingTasks?.Items?.Count == 0 ? false : true"
+           Narrow="true"
+           @bind-Class="@ThemeOptions.TableClass">
+        <TableHeader ThemeContrast="ThemeContrast.Light">
+            <TableRow>
+                <TableHeaderCell Class="parsingtaskstable" Style="width:26%">Название</TableHeaderCell>
+                <TableHeaderCell Class="parsingtaskstable" Style="width:50px">
+                    <img src="./img/VK_Black&White_Logo_transparent.png" width="25" height="25" />
+                </TableHeaderCell>
+                <TableHeaderCell Class="parsingtaskstable" Style="min-width:120px;width:140px">Создана</TableHeaderCell>
+                <TableHeaderCell Class="parsingtaskstable" Style="width:130px">Периодичность</TableHeaderCell>
+                <TableHeaderCell Class="parsingtaskstable" Style="width:140px">Следующий запуск</TableHeaderCell>
+                <TableHeaderCell Class="parsingtaskstable" Style="width:60px">Статус</TableHeaderCell>
+                <TableHeaderCell Style="width:135px">Действия</TableHeaderCell>
+            </TableRow>
+        </TableHeader>
+        <TableBody>
+            @if (_dataLoadingCompleted == false)
+            {
+                <TableRow>
+                    <TableRowCell ColumnSpan="7">
+                        <Field Style="height:3rem;" Display="Display.Flex">
+                            <div class="centered">
+                                <Wave Color="black" Size="24px" />
+                            </div>
+                        </Field>
+                    </TableRowCell>
+                </TableRow>
+            }
+            else
+            {
+                @if (_dataIsNotAvailable)
+                {
+                    <TableRow Selected="false">
+                        <TableRowCell ColumnSpan="7">
+                            <Field Style="height:3rem;" Display="Display.Block">
+                                <div class="centered text-muted d-flex justify-content-center align-items-center">
+                                    Нет данных
+                                </div>
+                            </Field>
+                        </TableRowCell>
+                    </TableRow>
+                }
+                else
+                {
+                    @if (_vkPeriodicParsingTasks is not null)
+                    {
+                        if (_vkPeriodicParsingTasks.Items.Count == 0)
+                        {
+                            <TableRow Selected="false">
+                                <TableRowCell ColumnSpan="7">
+                                    <Field Style="height:3rem;" Display="Display.Flex">
+                                        <div class="centered text-muted">
+                                            Список пуст
+                                        </div>
+                                    </Field>
+                                </TableRowCell>
+                            </TableRow>
+                        }
+                        else
+                        {
+                            @foreach (VkPeriodicParsingTaskVm parsingTask in _vkPeriodicParsingTasks.Items)
+                            {
+                                _editButtonsLoadingStates.TryGetValue(parsingTask.YaVkParsingTaskID, out bool isEditButtonLoading);
+                                _executionOptionButtonsChangingStates.TryGetValue(parsingTask.YaVkParsingTaskID, out bool isExecutionOptionChanging);
+                                _taskIsDeletingStates.TryGetValue(parsingTask.YaVkParsingTaskID, out bool isDeleting);
+
+                                <TableRow @key="parsingTask.YaVkParsingTaskID">
+                                    @if (parsingTask.OperationStatus == VkParsingTaskOperationStatus.Idle
+                                        && parsingTask.ResultType == VkParsingTaskResultType.Communities
+                                        && !isDeleting)
+                                    {
+                                        <TableRowCell>
+                                            <Blazorise.Link To="@GetCommunityTaskResultsLink(parsingTask)">@parsingTask.Title</Blazorise.Link>
+                                        </TableRowCell>
+                                    }
+                                    else
+                                    {
+                                        <TableRowCell>@parsingTask.Title</TableRowCell>
+                                    }
+                                    <TableRowCell Class="parsingtaskstable">
+                                        @parsingTask.VkontakteResultsCount
+                                    </TableRowCell>
+                                    <TableRowCell Class="parsingtaskstable">@parsingTask.CreatedDateTime.ToLocalTime().ToString("dd-MM-yyyy HH:mm")</TableRowCell>
+                                    <TableRowCell Class="parsingtaskstable">@(parsingTask.AutomationOptions.TaskExecutionRate.HasValue ? parsingTask.AutomationOptions.TaskExecutionRate.Value.GetUiName() : string.Empty)</TableRowCell>
+                                    <TableRowCell Class="parsingtaskstable">@(parsingTask.NextExecutionDateTime.HasValue ? parsingTask.NextExecutionDateTime.Value.ToLocalTime().ToString("dd-MM-yyyy HH:mm") : null)</TableRowCell>
+                                    @switch (parsingTask.OperationStatus)
+                                    {
+                                        case VkParsingTaskOperationStatus.Unknown:
+                                            <TableRowCell Class="parsingtaskstable"><Icon Name="@("fa-question")"></Icon></TableRowCell>
+                                            break;
+                                        case VkParsingTaskOperationStatus.New:
+                                            <TableRowCell Class="parsingtaskstable"><Icon Name="@("fa-plus")"></Icon></TableRowCell>
+                                            break;
+                                        case VkParsingTaskOperationStatus.Processing:
+                                            <TableRowCell Class="parsingtaskstable">@parsingTask.ExecutionPercentCompleted%</TableRowCell>
+                                            break;
+                                        case VkParsingTaskOperationStatus.Idle:
+                                            if (parsingTask.ProcessingResult == VkParsingTaskProcessingResult.Success)
+                                            {
+                                                <TableRowCell Class="parsingtaskstable">
+                                                    <div title="Время выполнения @(parsingTask.ExecutionTime.HasValue ? LongExtensions.GetUiExecutionTime(parsingTask.ExecutionTime.Value) : string.Empty)">
+                                                        <Icon Name="IconName.Check" Style="color:green"></Icon>
+                                                    </div>
+                                                </TableRowCell>
+                                            }
+                                            else
+                                            {
+                                                <TableRowCell Class="parsingtaskstable">
+                                                    <div class="d-flex">
+                                                        <Tooltip Fade="true"
+                                                                 Text="Выполнение задачи не завершилось успешно.
+                                                                            Возможно, её сложность оказалась слишком высока,
+                                                                            попробуйте поменять параметры"
+                                                                 Placement="TooltipPlacement.Bottom"
+                                                                 Multiline="true">
+                                                            <Icon Name="IconName.TimesCircle" Style="color:firebrick" />
+                                                        </Tooltip>
+                                                    </div>
+                                                </TableRowCell>
+                                            }
+                                            break;
+                                    }
+                                    <TableRowCell>
+                                        <Buttons Role="ButtonsRole.Toolbar">
+                                            @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner)
+                                                || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+                                                || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.ReadWrite))
+                                            {
+                                                <Buttons Class="mr-1">
+                                                    <Button Size="Size.Small"
+                                                            Loading="isEditButtonLoading"
+                                                            Color="Color.Info"
+                                                            Clicked="@(() => OnEditParsingTaskModalShow(parsingTask))"
+                                                            Style="width:2rem"
+                                                            Disabled="isDeleting">
+                                                        @if (!isEditButtonLoading)
+                                                        {
+                                                            <div class="unselectable"><Icon Name="IconName.Pen"></Icon></div>
+                                                        }
+                                                    </Button>
+                                                </Buttons>
+                                            }
+                                            <Buttons Class="mr-1">
+                                                <Button Size="Size.Small"
+                                                        Color="Color.Info"
+                                                        Disabled="@(isExecutionOptionChanging || isDeleting || (!UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner)
+                                                                    && !UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+                                                                    && !UserManager.GetAccessLevel().HasFlag(MembershipAccessType.ReadWrite)))"
+                                                        Active="parsingTask.ExecutionOption == VkPeriodicParsingTaskExecutionOptions.Ready"
+                                                        Clicked="@(() => OnExecutionOptionChanged(VkPeriodicParsingTaskExecutionOptions.Ready, parsingTask))">
+                                                    <Icon Name="IconName.Play"></Icon>
+                                                </Button>
+                                                <Button Size="Size.Small"
+                                                        Color="Color.Info"
+                                                        Disabled="@(isExecutionOptionChanging || isDeleting || (!UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner)
+                                                                    && !UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+                                                                    && !UserManager.GetAccessLevel().HasFlag(MembershipAccessType.ReadWrite)))"
+                                                        Active="parsingTask.ExecutionOption == VkPeriodicParsingTaskExecutionOptions.Paused"
+                                                        Clicked="@(() => OnExecutionOptionChanged(VkPeriodicParsingTaskExecutionOptions.Paused, parsingTask))">
+                                                    <Icon Name="IconName.Pause"></Icon>
+                                                </Button>
+                                            </Buttons>
+                                            <Buttons Class="mr-1">
+                                                @* нужно добавить экспорт всех сообществ в файл *@
+                                                @if (parsingTask.OperationStatus == VkParsingTaskOperationStatus.New
+                                                    || parsingTask.OperationStatus == VkParsingTaskOperationStatus.Processing)
+                                                {
+                                                    @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner)
+                                                        || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+                                                        || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.ReadWrite))
+                                                    {
+                                                        <Dropdown Direction="Direction.Down" RightAligned="true" Disabled="@isDeleting" Margin="Margin.Is0">
+                                                            <DropdownToggle Color="Color.Info" Split="false" Size="Size.Small">
+                                                                <Icon Name="IconName.Bars"></Icon>
+                                                            </DropdownToggle>
+                                                            <DropdownMenu Class="dropdown-menu-shadow" Style="font-size:small">
+                                                                <DropdownItem Style="cursor:pointer"
+                                                                              Clicked="@(() => DeleteVkParsingTask(parsingTask.YaVkParsingTaskID))">
+                                                                    Удалить задачу
+                                                                </DropdownItem>
+                                                            </DropdownMenu>
+                                                        </Dropdown>
+                                                    }
+                                                }
+                                                else if (parsingTask.OperationStatus == VkParsingTaskOperationStatus.Idle)
+                                                {
+                                                    <Dropdown Direction="Direction.Down" RightAligned="true" Disabled="@isDeleting" Margin="Margin.Is0">
+                                                        <DropdownToggle Color="Color.Info" Split="false" Size="Size.Small">
+                                                            <Icon Name="IconName.Bars"></Icon>
+                                                        </DropdownToggle>
+                                                        <DropdownMenu Class="dropdown-menu-shadow" Style="font-size:small">
+                                                            @if (parsingTask.ProcessingResult == VkParsingTaskProcessingResult.Success)
+                                                            {
+                                                                @if (parsingTask.ResultType == VkParsingTaskResultType.Profiles)
+                                                                {
+                                                                    @if (parsingTask.VkProfileIdsResultsExist)
+                                                                    {
+                                                                        <DropdownItem Style="cursor:pointer"
+                                                                                      Clicked="@(async () => await DownloadParsingResult(parsingTask.YaVkParsingTaskID, "vkids"))">
+                                                                            Скачать идентификаторы профилей ВКонтакте
+                                                                        </DropdownItem>
+                                                                    }
+                                                                    @if (parsingTask.VkProfileLinksResultsLinkExist)
+                                                                    {
+                                                                        <DropdownItem Style="cursor:pointer"
+                                                                                      Clicked="@(async () => await DownloadParsingResult(parsingTask.YaVkParsingTaskID, "vklinks"))">
+                                                                            Скачать ссылки на профили ВКонтакте
+                                                                        </DropdownItem>
+                                                                    }
+                                                                    @if (parsingTask.VkProfileCsvResultsLinkExist)
+                                                                    {
+                                                                        <DropdownItem Style="cursor:pointer"
+                                                                                      Clicked="@(async () => await DownloadParsingResult(parsingTask.YaVkParsingTaskID, "vkprofiles"))">
+                                                                            Скачать профили ВКонтакте в формате CSV
+                                                                        </DropdownItem>
+                                                                    }
+                                                                    @if (parsingTask.IgProfileResultsLinkExist)
+                                                                    {
+                                                                        <DropdownItem Style="cursor:pointer"
+                                                                                      Clicked="@(async () => await DownloadParsingResult(parsingTask.YaVkParsingTaskID, "igprofiles"))">
+                                                                            Скачать идентификаторы профилей Инстаграм
+                                                                        </DropdownItem>
+                                                                    }
+                                                                    @if (parsingTask.IgProfileLinksResultsLinkExist)
+                                                                    {
+                                                                        <DropdownItem Style="cursor:pointer"
+                                                                                      Clicked="@(async () => await DownloadParsingResult(parsingTask.YaVkParsingTaskID, "iglinks"))">
+                                                                            Скачать ссылки на профили Инстаграм
+                                                                        </DropdownItem>
+                                                                    }
+                                                                }
+                                                                else
+                                                                {
+                                                                    <DropdownItem Style="cursor:pointer"
+                                                                                  Clicked="@(async () => Navigation.NavigateTo(GetCommunityTaskResultsLink(parsingTask)))">
+                                                                        Открыть результат
+                                                                    </DropdownItem>
+                                                                }
+                                                            }
+                                                            @if (UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner)
+                                                                || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Admin)
+                                                                || UserManager.GetAccessLevel().HasFlag(MembershipAccessType.ReadWrite))
+                                                            {
+                                                                <DropdownDivider />
+                                                                <DropdownItem Style="cursor:pointer"
+                                                                              Clicked="@(() => DeleteVkParsingTask(parsingTask.YaVkParsingTaskID))">
+                                                                    Удалить задачу
+                                                                </DropdownItem>
+                                                            }
+                                                        </DropdownMenu>
+                                                    </Dropdown>
+                                                }
+                                            </Buttons>
+                                        </Buttons>
+                                    </TableRowCell>
+                                </TableRow>
+                            }
+                        }
+                    }
+                }
+            }
+        </TableBody>
+    </Table>
+</div>
+
+
+@code
+{
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+
+    private PaginatedResultVm<VkPeriodicParsingTaskVm> _vkPeriodicParsingTasks;
+
+    private PaginationButtons<VkPeriodicParsingTaskVm> _paginationButtons;
+    private EditParsingTaskModal _editTaskModal;
+
+    private Dictionary<Guid, bool> _editButtonsLoadingStates = new Dictionary<Guid, bool>();
+    private Dictionary<Guid, bool> _executionOptionButtonsChangingStates = new Dictionary<Guid, bool>();
+
+    private ActionErrorModal _actionErrorModal;
+    private string _actionErrorText;
+
+    private bool _dataLoadingCompleted;
+    private bool _dataIsNotAvailable;
+
+    //контроль активности вкладки у пользователя
+    private bool _browserPageIsHidden;
+    private Guid pageVisibilityStateListenerId = Guid.Empty;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        int localPageSize = await UiSettings.GetParsingTasksPaginationPageSizeAsync(_cts.Token);
+        _pageSize = localPageSize == 0 ? 5 : localPageSize;
+
+        await OnRefreshParsingTasksList();
+
+        _backgroundListRefresh = async (s, e) => await PerformBackgroundTaskListRefresh();
+        _taskListRefreshButton.NeedsBackgroundRefresh += _backgroundListRefresh;
+
+        _browserPageIsHidden = await VisibilityService.IsHiddenAsync();
+        pageVisibilityStateListenerId = await VisibilityService.OnVisibilityChangeAsync(OnVisibilityChange, this);
+    }
+
+    private async Task OnVisibilityChange(VisibilityInfo visibilityInfo)
+    {
+        _browserPageIsHidden = visibilityInfo.Hidden;
+
+        if (!_browserPageIsHidden && _taskListRefreshButton.UpdateInterval != 0)
+        {
+            await PerformBackgroundTaskListRefresh();
+        }
+    }
+
+    private async Task OnRefreshParsingTasksList(bool showLoading = true)
+    {
+        if (showLoading)
+        {
+            _dataLoadingCompleted = false;
+            StateHasChanged();
+        }
+
+        ApiCommandResult<PaginatedResultVm<VkPeriodicParsingTaskVm>> result = (_currentVkParsingTasksPageUri == null)
+            ? await ApiRepository.GetVkPeriodicParsingTasks(_pageSize)
+            : await ApiRepository.GetVkPeriodicParsingTasks(_currentVkParsingTasksPageUri);
+
+        if (result.Status == ApiCommandStatus.Ok)
+        {
+            _dataIsNotAvailable = false;
+
+            PopulateEditButtonsLoadingStates(result.Data);
+            PopulateTaskDeletingState(result.Data);
+
+            _vkPeriodicParsingTasks = result.Data;
+
+            _taskListRefreshButton.UpdateRefreshInterval();
+        }
+        else
+        {
+            _dataIsNotAvailable = true;
+        }
+
+        if (showLoading)
+        {
+            _dataLoadingCompleted = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PerformBackgroundTaskListRefresh()
+    {
+        if (!_browserPageIsHidden)
+        {
+            ApiCommandResult<PaginatedResultVm<VkPeriodicParsingTaskVm>> result = (_currentVkParsingTasksPageUri == null)
+                ? await ApiRepository.RefreshVkPeriodicParsingTasks(_pageSize)
+                : await ApiRepository.RefreshVkPeriodicParsingTasks(_currentVkParsingTasksPageUri);
+
+            _dataIsNotAvailable = result.Status == ApiCommandStatus.Ok ? false : true;
+
+            if (result.Status == ApiCommandStatus.Ok)
+            {
+                _vkPeriodicParsingTasks = result.Data;
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnGetVkParsingTasksPageAsync(Uri uri)
+    {
+        _vkPeriodicParsingTasks = null;
+        StateHasChanged();
+
+        ApiCommandResult<PaginatedResultVm<VkPeriodicParsingTaskVm>> result = await ApiRepository.GetVkPeriodicParsingTasks(uri);
+
+        _dataIsNotAvailable = result.Status == ApiCommandStatus.Ok ? false : true;
+
+        if (result.Status == ApiCommandStatus.Ok)
+        {
+            _vkPeriodicParsingTasks = result.Data;
+            _currentVkParsingTasksPageUri = uri;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnEditParsingTaskModalShow(VkPeriodicParsingTaskVm parsingTaskVm)
+    {
+        _editButtonsLoadingStates[parsingTaskVm.YaVkParsingTaskID] = true;
+        StateHasChanged();
+
+        ApiCommandResult<VkPeriodicParsingTaskVm> result =
+            await ApiRepository.GetVkPeriodicParsingTask(parsingTaskVm.YaVkParsingTaskID);
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                await _editTaskModal.ShowWithModel(result.Data);
+                break;
+
+            case ApiCommandStatus.NotFound:
+                _actionErrorText = result.ErrorText;
+                _actionErrorModal.Show();
+                break;
+
+            default:
+                break;
+        }
+
+        _editButtonsLoadingStates[parsingTaskVm.YaVkParsingTaskID] = false;
+        StateHasChanged();
+    }
+
+    private async Task OnPageSizeChanged(int value)
+    {
+        _pageSize = value;
+        await UiSettings.SetParsingTasksPaginationPageSizeAsync(value, _cts.Token);
+
+        _currentVkParsingTasksPageUri = null;
+
+        await OnRefreshParsingTasksList();
+    }
+
+    private async Task OnExecutionOptionChanged(VkPeriodicParsingTaskExecutionOptions value, VkPeriodicParsingTaskVm parsingTask)
+    {
+        if (value != parsingTask.ExecutionOption)
+        {
+            _executionOptionButtonsChangingStates[parsingTask.YaVkParsingTaskID] = true;
+
+            parsingTask.ExecutionOption = value;
+
+            JsonPatchDocument<VkPeriodicParsingTaskSm> patch =
+                new JsonPatchDocument<VkPeriodicParsingTaskSm>().Replace(p => p.ExecutionOption, value);
+
+            ApiCommandResult<VkPeriodicParsingTaskVm> result = await ApiRepository
+                .UpdateVkPeriodicParsingTask(parsingTask.YaVkParsingTaskID, patch);
+
+            switch (result.Status)
+            {
+                case ApiCommandStatus.Ok:
+                    await OnRefreshParsingTasksList(false);
+                    break;
+
+                case ApiCommandStatus.NotFound:
+                    _actionErrorText = result.ErrorText;
+                    _actionErrorModal.Show();
+                    await OnRefreshParsingTasksList(false);
+                    break;
+
+                default:
+                    break;
+            }
+
+            _executionOptionButtonsChangingStates[parsingTask.YaVkParsingTaskID] = false;
+
+            StateHasChanged();
+        }
+    }
+
+    private void PopulateEditButtonsLoadingStates(PaginatedResultVm<VkPeriodicParsingTaskVm> paginatedResult)
+    {
+        _editButtonsLoadingStates = new Dictionary<Guid, bool>(paginatedResult.Items.Count);
+
+        foreach (VkPeriodicParsingTaskVm parsingTask in paginatedResult.Items)
+        {
+            _editButtonsLoadingStates.Add(parsingTask.YaVkParsingTaskID, false);
+        }
+    }
+
+    private void PopulateTaskDeletingState(PaginatedResultVm<VkPeriodicParsingTaskVm> paginatedResult)
+    {
+        _taskIsDeletingStates = new Dictionary<Guid, bool>(paginatedResult.Items.Count);
+
+        foreach (VkPeriodicParsingTaskVm parsingTask in paginatedResult.Items)
+        {
+            _taskIsDeletingStates.Add(parsingTask.YaVkParsingTaskID, false);
+        }
+    }
+
+    private async Task DownloadParsingResult(Guid yaVkParsingTaskId, string resultType)
+    {
+        Uri url = await ApiRepository.GetVkPeriodicParsingTaskResultDownloadLink(yaVkParsingTaskId, resultType);
+
+        if (url != null)
+        {
+            await JS.InvokeAsync<object>("open", url.AbsoluteUri, "_blank");
+        }
+    }
+
+    private async Task DeleteVkParsingTask(Guid yaVkParsingTaskId)
+    {
+        _taskIsDeletingStates[yaVkParsingTaskId] = true;
+        StateHasChanged();
+
+        ApiCommandResult<string> result = await ApiRepository.DeleteVkPeriodicParsingTask(yaVkParsingTaskId);
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                await OnRefreshParsingTasksList(false);
+                break;
+
+            case ApiCommandStatus.NotFound:
+                _actionErrorText = result.ErrorText;
+                _actionErrorModal.Show();
+                break;
+
+            default:
+                _taskIsDeletingStates[yaVkParsingTaskId] = false;
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnTaskSavedCallbackHandler(object args)
+    {
+        await OnRefreshParsingTasksList();
+
+        if (args is string taskTitle)
+        {
+            Toaster.Success("Задача обновлена");
+        }
+    }
+
+    private string GetCommunityTaskResultsLink(VkPeriodicParsingTaskVm yaVkParsingTask)
+    {
+        string result = string.Empty;
+
+        if (yaVkParsingTask.ResultType == VkParsingTaskResultType.Communities)
+        {
+            switch (yaVkParsingTask.Options.CommunitiesResultSubType)
+            {
+                case VkParsingTaskResultCommunitiesSubType.TaIntersection:
+                    result = $"/parsingtasks/periodic/{yaVkParsingTask.YaVkParsingTaskID}/tacommsearch";
+                    break;
+                case VkParsingTaskResultCommunitiesSubType.CommunitiesSearch:
+                    result = $"/parsingtasks/periodic/{yaVkParsingTask.YaVkParsingTaskID}/commsearch";
+                    break;
+                case VkParsingTaskResultCommunitiesSubType.Unknown:
+                default:
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeAsyncCore();
+
+        Dispose(disposing: false);
+#pragma warning disable CA1816 // Dispose methods should call SuppressFinalize
+        GC.SuppressFinalize(this);
+#pragma warning restore CA1816 // Dispose methods should call SuppressFinalize
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _taskListRefreshButton.NeedsBackgroundRefresh -= _backgroundListRefresh;
+        }
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        if (pageVisibilityStateListenerId != Guid.Empty)
+        {
+            await VisibilityService.RemoveVisibilityChangeCallbackAsync(pageVisibilityStateListenerId);
+        }
+
+        pageVisibilityStateListenerId = Guid.Empty;
+    }
+
+    public override void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+
+        base.Dispose();
+    }
+}

@@ -1,0 +1,70 @@
+﻿@using System.ComponentModel
+@using YA.WebClient.Application.Interfaces
+
+@inject IJSRuntime JS
+@inject IThemeOptionsState ThemeOptions
+
+<Modal @ref="_modal" Closing="@OnModalClosing" ShowBackdrop="true">
+    <ModalContent Centered="true" Size="ModalSize.Default" Class="@ThemeOptions.ModalContentClass">
+        <ModalBody MaxHeight="65">
+            <Field>
+                @MessageText
+            </Field>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Primary" Block="false" Clicked="@(() => Confirm())">
+                Да
+            </Button>
+            <Button Color="Color.Secondary" Block="false" Clicked="@(() => Hide())">
+                Отмена
+            </Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+
+@code
+{
+    [Parameter]
+    public string MessageText { get; set; }
+    [Parameter]
+    public EventCallback<string> MessageTextChanged { get; set; }
+
+    [Parameter]
+    public Action OnYesAction { get; set; }
+    [Parameter]
+    public EventCallback<Action> OnYesActionChanged { get; set; }
+
+    // если уже открыто, то выпадает исключение, поэтому контролируем это на нашей стороне
+    public bool IsShowing { get; set; }
+
+    private Modal _modal;
+
+    public void Show()
+    {
+        if (!IsShowing)
+        {
+            _modal.Show();
+            IsShowing = true;
+        }
+    }
+
+    public void Hide()
+    {
+        if (IsShowing)
+        {
+            _modal.Hide();
+        }
+    }
+
+    private void Confirm()
+    {
+        Hide();
+        OnYesAction?.Invoke();
+    }
+
+    private void OnModalClosing(CancelEventArgs e)
+    {
+        IsShowing = false;
+    }
+}

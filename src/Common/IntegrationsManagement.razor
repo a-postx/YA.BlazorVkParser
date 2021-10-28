@@ -1,0 +1,128 @@
+﻿@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application
+@using YA.WebClient.Extensions
+
+@inject NavigationManager Navigation
+@inject IVkTokenService VkTokenManager
+@inject IApiRepository ApiRepository
+@inject IRuntimeState RuntimeState
+@inject IJSRuntime JS
+
+<Card ColumnSize="ColumnSize.Is12">
+    <CardBody>
+        <CardTitle Size="5">
+            <img class="mr-3 align-text-bottom" src="./img/VK_Black&White_Logo_transparent.png" width="25" height="25" alt="ВКонтакте" />ВКонтакте
+        </CardTitle>
+        <CardText Class="text-muted mb-3">
+            Позволяет искать целевую аудиторию и работать с рекламными объявлениями в социальной сети ВКонтакте.
+        </CardText>
+        <Field Class="no-gutters mb-0">
+            @if (_isLoadingVkSnConnection)
+            {
+                <Wave Size="14px" />
+            }
+            else
+            {
+                @if (_errorGettingVkSnConnection)
+                {
+                    <Blazorise.Text Class="alert-light">Ошибка получения данных</Blazorise.Text>
+                }
+                else
+                {
+                    @if (_vkSnConnection != null && _vkSnConnection.IsActive == true)
+                    {
+                        <Button Size="Size.None" Color="Color.Danger" Clicked="@(() => DeleteVkSnConnection())">
+                            <Icon Name="IconName.Key"></Icon> Отключить (ID: @_vkSnConnection.UserId)
+                        </Button>
+                    }
+                    else
+                    {
+                        <Button Size="Size.None" Color="Color.Success" Clicked="@(() => VkTokenManager.GetVkCode(Navigation.Uri))">
+                            <Icon Name="IconName.Key"></Icon> Подключить
+                        </Button>
+                    }
+                }
+            }
+        </Field>
+    </CardBody>
+</Card>
+
+
+@code
+{
+    [Parameter]
+    public bool Visible { get; set; }
+
+    private VkAccessTokenVm _vkSnConnection;
+
+    private bool _isLoadingVkSnConnection = true;
+    private bool _errorGettingVkSnConnection;
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (Visible)
+        {
+            await LoadVkSnConnection();
+        }
+
+        await base.OnParametersSetAsync();
+    }
+
+    private async Task LoadVkSnConnection()
+    {
+        VkAccessTokenVm cachedTokenVm = RuntimeState.GetVkAccessToken();
+
+        if (cachedTokenVm != null)
+        {
+            _vkSnConnection = cachedTokenVm;
+        }
+        else
+        {
+            ApiCommandResult<VkAccessTokenVm> result = await ApiRepository.GetVkAccessToken();
+
+            switch (result.Status)
+            {
+                case ApiCommandStatus.Ok:
+                    RuntimeState.AddVkAccessToken(result.Data);
+                    _vkSnConnection = result.Data;
+                    _errorGettingVkSnConnection = false;
+                    break;
+
+                case ApiCommandStatus.NotFound:
+                    RuntimeState.RemoveVkAccessToken();
+                    _vkSnConnection = null;
+                    _errorGettingVkSnConnection = false;
+                    break;
+                default:
+                    _errorGettingVkSnConnection = true;
+                    break;
+            }
+        }
+
+        _isLoadingVkSnConnection = false;
+    }
+
+    private async Task DeleteVkSnConnection()
+    {
+        ApiCommandResult<string> result = await ApiRepository.DeleteVkAccessToken();
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                RuntimeState.RemoveVkAccessToken();
+                break;
+            case ApiCommandStatus.NotFound:
+                RuntimeState.RemoveVkAccessToken();
+                break;
+            default:
+                await JS.ConsoleLog($"Ошибка удаления токена доступа ВК: {result.Status}");
+                break;
+        }
+
+        await LoadVkSnConnection();
+
+        StateHasChanged();
+    }
+}

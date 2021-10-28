@@ -1,0 +1,29 @@
+﻿@using YA.WebClient.Application.Interfaces
+
+@inject NavigationManager Navigation
+@inject IVkTokenService VkTokenService
+
+<Alert Padding="Padding.Is4" Color="Color.Dark" Dismisable="false" Visible="@(AuthErrorDescription != string.Empty ? true : false)">
+    <Paragraph Padding="Padding.Is0" Style="font-size:small;">
+        <b>@AuthErrorDescription</b>
+    </Paragraph>
+    <Paragraph Padding="Padding.Is0" Style="font-size:small">
+        <div>
+            Пожалуйста, повторите запрос или напишите нам в чат поддержки, указав следующую информацию:
+            <p><b>Идентификатор запроса:</b> @RequestId</p>
+        </div>
+    </Paragraph>
+    <Paragraph>
+        <Button Size="Size.Small" Color="Color.Secondary" Clicked="@(() => VkTokenService.GetVkCode(Navigation.BaseUri + "options/integrations"))">
+            <Icon Name="IconName.Key"></Icon> Повторить
+        </Button>
+    </Paragraph>
+</Alert>
+
+@code
+{
+    [Parameter]
+    public string RequestId { get; set; }
+    [Parameter]
+    public string AuthErrorDescription { get; set; }
+}

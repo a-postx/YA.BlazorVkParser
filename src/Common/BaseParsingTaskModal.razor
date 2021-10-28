@@ -1,0 +1,83 @@
+﻿@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Events
+@using YA.WebClient.Application
+@using System.Linq
+
+@implements IDisposable
+
+@code
+{
+    protected ModalApiIssueAlert _modalAlert;
+
+    protected ICollection<VkQuickParsingTaskVm> _availableTasks { get; set; } = new List<VkQuickParsingTaskVm>();
+    protected ICollection<VkQuickParsingTaskVm> _selectedTasks { get; set; } = new List<VkQuickParsingTaskVm>();
+
+    [Inject]
+    protected IApiRepository ApiRepository { get; set; }
+
+    [Inject]
+    protected IModalUserWarningState ModalUserWarning { get; set; }
+
+    private EventHandler<ApiCallCompletedEventArgs> _apiCallCompletedHandler;
+
+    protected override void OnInitialized()
+    {
+        _apiCallCompletedHandler = (s, args) => OnApiCallCompletedCallback(args);
+        ApiRepository.ApiCallCompleted += _apiCallCompletedHandler;
+
+        base.OnInitialized();
+    }
+
+    private void OnApiCallCompletedCallback(ApiCallCompletedEventArgs args)
+    {
+        ModalUserWarning.Update(args.Status, args.Error, args.RequestId);
+    }
+
+    protected async Task<IEnumerable<VkQuickParsingTaskVm>> GetParsingTasksAsTaskSource(string searchText)
+    {
+        List<VkQuickParsingTaskVm> result = new List<VkQuickParsingTaskVm>();
+
+        ApiCommandResult<PaginatedResultVm<VkQuickParsingTaskVm>> remoteResult =
+            await ApiRepository.GetQuickSearchVkOneTimeParsingTasks(10, searchText);
+
+        switch (remoteResult.Status)
+        {
+            case ApiCommandStatus.Ok:
+                List<VkQuickParsingTaskVm> receivedItems = remoteResult.Data.Items.ToList();
+
+                foreach (VkQuickParsingTaskVm item in _selectedTasks)
+                {
+                    VkQuickParsingTaskVm alreadySelectedItem = receivedItems
+                        .FirstOrDefault(e => e.YaVkParsingTaskID == item.YaVkParsingTaskID);
+
+                    if (alreadySelectedItem is not null)
+                    {
+                        receivedItems.Remove(alreadySelectedItem);
+                    }
+                }
+
+                List<VkQuickParsingTaskVm> profileAndCommTasks = receivedItems
+                    .Where(e => e.ResultType == VkParsingTaskResultType.Profiles
+                            || e.ResultType == VkParsingTaskResultType.Communities).ToList();
+
+                _availableTasks = profileAndCommTasks;
+
+                result = profileAndCommTasks;
+                break;
+
+            default:
+                break;
+        }
+
+        StateHasChanged();
+
+        return result;
+    }
+
+    public virtual void Dispose()
+    {
+        ApiRepository.ApiCallCompleted -= _apiCallCompletedHandler;
+    }
+}

@@ -1,0 +1,27 @@
+﻿@if (ShowBackgroundImage)
+{
+    <div class="dots-container">
+        <div class="dots">
+        </div>
+    </div>
+}
+
+@if (ShowContent)
+{
+    <div class="loading-content-container">
+        @if (ShowBackgroundImage)
+        {
+            <img src="./img/icon-150x150.png" style="width:150px;" />
+        }
+
+        @if (ShowSpinner)
+        {
+            <Wave Center="true" Color="black" />
+        }
+
+        @if (ShowChildContent)
+        {
+            @ChildContent
+        }
+    </div>
+}

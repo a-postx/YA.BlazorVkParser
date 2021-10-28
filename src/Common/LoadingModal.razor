@@ -1,0 +1,70 @@
+﻿@using YA.WebClient.Application.Services
+@using YA.WebClient.Application.Events
+
+@implements IDisposable
+
+@if (_isLoading)
+{
+    <div class="loader-modal">
+        <div class="loader-modal-content">
+            <Wave Center="true" Color="white" />
+            @if (!string.IsNullOrEmpty(_message))
+            {
+                <div class="text-lg-left text-light">@_message</div>
+            }
+        </div>
+    </div>
+}
+
+@code
+{
+    //блейзорайс должен сделать свой https://github.com/Megabit/Blazorise/issues/1388
+    [Inject]
+    public LoadingModalService LoadingService { get; set; }
+
+    private bool _isLoading;
+    private string _message = "";
+
+    private EventHandler _showHandler;
+    private EventHandler _hideHandler;
+    private EventHandler<LoadingModalMessageChangedEventArgs> _setMessageHandler;
+
+    protected override void OnInitialized()
+    {
+        _showHandler = (s, args) => Show();
+        LoadingService.OnShow += _showHandler;
+
+        _hideHandler = (s, args) => Hide();
+        LoadingService.OnHide += _hideHandler;
+
+        _setMessageHandler = (s, args) => SetMessage(args);
+        LoadingService.OnSetMessage += _setMessageHandler;
+    }
+
+    private void Show()
+    {
+        _message = string.Empty;
+        _isLoading = true;
+        StateHasChanged();
+    }
+
+    private void Hide()
+    {
+        _isLoading = false;
+        _message = string.Empty;
+        StateHasChanged();
+    }
+
+    private void SetMessage(LoadingModalMessageChangedEventArgs args)
+    {
+        _message = args.Message;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        LoadingService.OnShow -= _showHandler;
+        LoadingService.OnHide -= _hideHandler;
+        LoadingService.OnSetMessage -= _setMessageHandler;
+    }
+}

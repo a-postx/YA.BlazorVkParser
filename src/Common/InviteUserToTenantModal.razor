@@ -1,0 +1,251 @@
+﻿@using AutoMapper
+@using System.Text.RegularExpressions
+@using System.ComponentModel
+@using YA.WebClient.Application
+@using YA.WebClient.Application.Models.SaveModels
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Events
+@using YA.WebClient.Extensions
+@using YA.WebClient.Application.Caches
+
+@inject TenantUserInvitationModal InvitationModal
+@inject IJSRuntime JS
+@inject IMapper Mapper
+@inject IThemeOptionsState ThemeOptions
+@inject IApiRepository ApiRepository
+@inject IModalUserWarningState ModalUserWarning
+
+@implements IDisposable
+
+<Modal @ref="_modal" Closing="@OnModalClosing" ShowBackdrop="true">
+    <ModalContent Centered="true" Size="ModalSize.Default" Class="@ThemeOptions.ModalContentClass">
+        <ModalHeader>
+            <ModalTitle>Пригласить пользователя</ModalTitle>
+            <CloseButton Clicked="@OnModalClose" AutoClose="true" />
+        </ModalHeader>
+        <ModalBody MaxHeight="65">
+            <ModalApiIssueAlert @ref="_modalAlert" />
+            <Validations @ref="_tenantUserInvitationValidation"
+                         Mode="ValidationMode.Auto"
+                         ValidateOnLoad="false"
+                         Model="@_tenantUserInvitationModal">
+                <Validation Validator="ValidatePersonEmailInput">
+                    <Field>
+                        <FieldLabel>Персона</FieldLabel>
+                        <TextEdit Autofocus="true"
+                                  DelayTextOnKeyPress="true"
+                                  DelayTextOnKeyPressInterval="500"
+                                  InputMode="TextInputMode.Email"
+                                  @bind-Text="@_tenantUserInvitationModal.Email"
+                                  Placeholder="Адрес электроной почты...">
+                            <Feedback>
+                                <ValidationError Tooltip="false" />
+                            </Feedback>
+                        </TextEdit>
+                    </Field>
+                </Validation>
+                <Field>
+                    <FieldLabel>Роль</FieldLabel>
+                    <FieldBody ColumnSize="ColumnSize.Is12">
+                        <Select TValue="MembershipAccessType" @bind-SelectedValue="@_tenantUserInvitationModal.AccessType">
+                            <SelectItem Value="MembershipAccessType.ReadOnly"><Text>ТолькоЧтение</Text></SelectItem>
+                            <SelectItem Value="MembershipAccessType.ReadWrite"><Text>Запись</Text></SelectItem>
+                            <SelectItem Value="MembershipAccessType.Admin"><Text>Админ</Text></SelectItem>
+                        </Select>
+                    </FieldBody>
+                </Field>
+                <Field>
+                    <Alert Padding="Padding.Is2"
+                           Color="Color.Secondary"
+                           Dismisable="false"
+                           Visible="true">
+                        <Paragraph Padding="Padding.Is0" Margin="Margin.Is2.FromTop.Is2.FromBottom" Style="font-size:small">
+                            <div class="mr-2" style="padding: 0px; display: inline-block">
+                                <Icon Name="IconName.InfoCircle" Style="color:#70bcff" />
+                                @if(_tenantUserInvitationModal.AccessType == MembershipAccessType.ReadOnly)
+                                {
+                                    <text> Роль ТолькоЧтение даёт возможность просматривать задачи парсинга и скачивать результаты</text>
+                                }
+                                else if (_tenantUserInvitationModal.AccessType == MembershipAccessType.ReadWrite)
+                                {
+                                    <text> Роль Запись даёт возможность создавать и удалять задачи парсинга</text>
+                                }
+                                else if (_tenantUserInvitationModal.AccessType == MembershipAccessType.Admin)
+                                {
+                                    <text> Роль Админ даёт возможность редактировать свойства аккаунта</text>
+                                }
+                            </div>
+                        </Paragraph>
+                    </Alert>
+                </Field>
+            </Validations>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Success"
+                    Loading="@_submitButtonIsLoading"
+                    Block="true"
+                    Disabled="@_submitButtonDisabled"
+                    Clicked="@(() => OnAddInvitation())">
+                Послать приглашение
+            </Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+@code
+{
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    [Parameter]
+    public EventCallback<InvitationVm> OnInvitationAddedCallback { get; set; }
+
+    private Modal _modal;
+    private ModalApiIssueAlert _modalAlert;
+
+    private bool _submitButtonIsLoading = false;
+
+    private Validations _tenantUserInvitationValidation;
+    private TenantUserInvitationModal _tenantUserInvitationModal;
+
+    public bool _submitButtonDisabled = true;
+
+    private EventHandler<ApiCallCompletedEventArgs> _apiCallCompletedHandler;
+
+    protected override void OnInitialized()
+    {
+        _tenantUserInvitationModal = InvitationModal;
+
+        if (string.IsNullOrEmpty(_tenantUserInvitationModal.InvitedBy))
+        {
+            _tenantUserInvitationModal.InvitedBy = UserManager.GetUser()?.Email;
+        }
+
+        _apiCallCompletedHandler = (s, args) => OnApiCallCompletedCallback(args);
+        ApiRepository.ApiCallCompleted += _apiCallCompletedHandler;
+
+        base.OnInitialized();
+    }
+
+    public void Show()
+    {
+        _modalAlert.Hide();
+        _modal.Show();
+    }
+
+    public void Hide()
+    {
+        OnModalClose();
+    }
+
+    private void OnModalClosing(CancelEventArgs e)
+    {
+        // just set Cancel to true to prevent modal from closing
+        //e.Cancel = true;
+    }
+
+    private void OnModalClose()
+    {
+        _modalAlert.Hide();
+        Reset();
+        _modal.Hide();
+    }
+
+    private void OnApiCallCompletedCallback(ApiCallCompletedEventArgs args)
+    {
+        ModalUserWarning.Update(args.Status, args.Error, args.RequestId);
+    }
+
+    private void ValidatePersonEmailInput(ValidatorEventArgs e)
+    {
+        string rawInput = Convert.ToString(e.Value);
+
+        if (string.IsNullOrEmpty(rawInput))
+        {
+            e.Status = ValidationStatus.None;
+        }
+        else
+        {
+            bool valid = NotificationEmailIsValid(rawInput);
+
+            if (valid)
+            {
+                _submitButtonDisabled = false;
+                e.Status = ValidationStatus.Success;
+            }
+            else
+            {
+                _submitButtonDisabled = true;
+                e.Status = ValidationStatus.Error;
+                e.ErrorText = "Введите адрес электронной почты";
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private bool NotificationEmailIsValid(string input)
+    {
+        bool result = false;
+
+        if (!string.IsNullOrWhiteSpace(input))
+        {
+            //https://stackoverflow.com/questions/5342375/regex-email-validation?page=1&tab=votes#tab-top
+            Regex regex = new Regex(@"^([\w\.\-]+)@([\w\-]+)((\.(\w){2,})+)$");
+            System.Text.RegularExpressions.Match match = regex.Match(input);
+            result = (match.Success) ? true : false;
+        }
+
+        return result;
+    }
+
+    private async Task OnAddInvitation()
+    {
+        _submitButtonIsLoading = true;
+        _submitButtonDisabled = true;
+        StateHasChanged();
+
+        if (string.IsNullOrEmpty(_tenantUserInvitationModal.InvitedBy))
+        {
+            _submitButtonIsLoading = false;
+            _submitButtonDisabled = false;
+            StateHasChanged();
+            await JS.ConsoleLog("текущий пользователь не найден");
+            return;
+        }
+
+        InvitationSm inviteSm = new InvitationSm(_tenantUserInvitationModal.Email, _tenantUserInvitationModal.AccessType, _tenantUserInvitationModal.InvitedBy);
+
+        ApiCommandResult<InvitationVm> result = await ApiRepository.CreateInvitation(inviteSm);
+
+        _submitButtonIsLoading = false;
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                Hide();
+                await OnInvitationAddedCallback.InvokeAsync(result.Data);
+                await UserManager.RefreshStateAsync();
+                break;
+
+            default:
+                _submitButtonDisabled = false;
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    private void Reset()
+    {
+        _tenantUserInvitationModal.Email = string.Empty;
+        _tenantUserInvitationModal.AccessType = MembershipAccessType.ReadOnly;
+    }
+
+    public void Dispose()
+    {
+        ApiRepository.ApiCallCompleted -= _apiCallCompletedHandler;
+    }
+}

@@ -1,0 +1,17 @@
+﻿@using YA.WebClient.Extensions
+@using YA.WebClient.Application.Interfaces
+
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ISignService SignService 
+
+@code 
+{
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.ConsoleLog("перенаправление на логин из компонента");
+        SignService.BeginLogin(Navigation.Uri);
+
+        await base.OnInitializedAsync();
+    }
+}

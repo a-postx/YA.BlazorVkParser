@@ -1,0 +1,102 @@
+﻿@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application.Interfaces
+
+@inject NavigationManager Navigation
+@inject IPageUserWarningState PageUserWarning
+
+@implements IDisposable
+
+<Alert @ref="_alert" Padding="Padding.Is4" Color="Color.Warning" Dismisable="true">
+    @if (_commandStatus.HasValue)
+    {
+        @if (_commandStatus == ApiCommandStatus.UnableToMakeApiCall)
+        {
+            <AlertDescription>
+                <Fields ColumnSize="ColumnSize.Is12" Margin="Margin.Is0" Class="mt-0">
+                    <Field ColumnSize="ColumnSize.Is12" Class="d-inline-block align-top mb-0">
+                        Ошибка сети. Пожалуйста, проверьте подключение к Интернету.
+                    </Field>
+                </Fields>
+            </AlertDescription>
+        }
+        else
+        {
+            <AlertMessage>
+                <Field ColumnSize="ColumnSize.Is12" Class="align-top mb-0">
+                    <Heading Size="HeadingSize.Is4" Color="TextColor.Danger">
+                        <b>Ой, ошибка</b>
+                    </Heading>
+                </Field>
+                <Field ColumnSize="ColumnSize.Is12" Class="mb-0">
+                    <Text Padding="Padding.Is0" Margin="Margin.Is0" Style="font-size:small;font-weight:400">
+                        Похоже, что-то пошло не так! Мы автоматически фиксируем эти ошибки и работаем над их устранением,
+                        прямо сейчас вы можете попробовать обновить страницу. Если проблема не уходит, то вы можете написать
+                        в чат поддержки, указав следующую информацию:
+                    </Text>
+                </Field>
+                <Field ColumnSize="ColumnSize.Is12" Class="mb-0">
+                    <Text Padding="Padding.Is0" Margin="Margin.Is0" Style="font-size:small;font-weight:400">
+                        <b>Идентификатор запроса:</b> @_reqIdText
+                    </Text>
+                </Field>
+                <CloseButton Clicked="@OnErrorAlertClose" AutoClose="true" />
+            </AlertMessage>
+        }
+    }
+</Alert>
+
+@code
+{
+    private ApiCommandStatus? _commandStatus = null;
+    private string _errorText = null;
+    private string _reqIdText = null;
+
+    Alert _alert;
+
+    private EventHandler _warningPropertiesChangedHandler;
+
+    protected override void OnInitialized()
+    {
+        _warningPropertiesChangedHandler = (s, args) => OnWarningValuesChangedCallback();
+        PageUserWarning.PropertiesUpdated += _warningPropertiesChangedHandler;
+
+        base.OnInitialized();
+    }
+
+    private void OnWarningValuesChangedCallback()
+    {
+        _commandStatus = PageUserWarning.Status;
+        _errorText = PageUserWarning.ErrorMessage;
+        _reqIdText = (PageUserWarning.RequestId != null) ? PageUserWarning.RequestId.ToString() : null;
+
+        if (!string.IsNullOrEmpty(PageUserWarning.ErrorMessage))
+        {
+            _alert.Show();
+        }
+        else
+        {
+            _alert.Hide();
+        }
+
+        //если уже были показаны, то показ не вызывает перерисовку, обновляем принудительно
+        StateHasChanged();
+    }
+
+    private void OnErrorAlertClose()
+    {
+        Hide();
+    }
+
+    public void Hide()
+    {
+        _commandStatus = null;
+        _errorText = null;
+        _reqIdText = null;
+        _alert.Hide();
+    }
+
+    public void Dispose()
+    {
+        PageUserWarning.PropertiesUpdated -= _warningPropertiesChangedHandler;
+    }
+}

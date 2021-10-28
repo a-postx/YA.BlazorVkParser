@@ -1,0 +1,44 @@
+﻿@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Events
+
+@implements IDisposable
+
+@code
+{
+    protected Uri _currentVkParsingTasksPageUri;
+    protected int _pageSize;
+
+    protected Dictionary<Guid, bool> _taskIsDeletingStates = new Dictionary<Guid, bool>();
+
+    protected ListRefreshButton _taskListRefreshButton;
+
+    protected EventHandler _backgroundListRefresh;
+
+    [Inject]
+    protected IApiRepository ApiRepository { get; set; }
+
+    [Inject]
+    protected IPageUserWarningState PageUserWarning { get; set; }
+
+    private EventHandler<ApiCallCompletedEventArgs> _apiCallCompletedHandler;
+
+    protected override void OnInitialized()
+    {
+        _apiCallCompletedHandler = (s, args) => OnApiCallCompletedCallback(args);
+        ApiRepository.ApiCallCompleted += _apiCallCompletedHandler;
+
+        base.OnInitialized();
+    }
+
+    private void OnApiCallCompletedCallback(ApiCallCompletedEventArgs args)
+    {
+        PageUserWarning.Update(args.Status, args.Error, args.RequestId);
+    }
+
+    public virtual void Dispose()
+    {
+        ApiRepository.ApiCallCompleted -= _apiCallCompletedHandler;
+
+        GC.SuppressFinalize(this);
+    }
+}

@@ -1,0 +1,113 @@
+﻿@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Constants
+@using YA.WebClient.Application.Enums
+
+@inject NavigationManager Navigation
+@inject ISignService SignManager
+@inject IJSRuntime JS
+@inject IThemeOptionsState ThemeOptions
+
+<AuthorizeView>
+    <Authorized>
+        <BarDropdown>
+            <BarDropdownToggle @bind-Style="@ThemeOptions.UserToggleBackgroundColorStyle">
+                <div class="usertoggle_avatar">
+                    <img style="width:28px;height:auto;border-radius:50%" src="@_avatarUrl" />
+                </div>
+            </BarDropdownToggle>
+            <BarDropdownMenu RightAligned="true" Class="dropdown-menu-shadow" Style="font-size:small" Margin="Margin.Is0">
+                <DropdownItem Style="cursor:pointer" Clicked="@(() => Navigation.NavigateTo("/options/profile"))">
+                    <div class="usermenu_user">
+                        <div class="usermenu_user-icon-wrapper">
+                            <img style="width:32px;height:auto;border-radius:50%" src="@_avatarUrl" />
+                        </div>
+                        <div class="usermenu_user-info">
+                            <div class="usermenu_user-info-box">
+                                @* Пользователь из ВКонтакте не получает почты *@
+                                @if (@context.User.Claims.FirstOrDefault(claim => claim.Type == CustomClaimNames.email) == null)
+                                {
+                                    <span style="color:#000000;font-size:14px">
+                                        @context.User.Identity.Name
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="usermenu_username">
+                                        @context.User.Claims.FirstOrDefault(claim => claim.Type == CustomClaimNames.email)?.Value
+                                    </span>
+                                    <span class="usermenu_user-name">
+                                        @context.User.Identity.Name
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </DropdownItem>
+                @if (UserManager.GetTenant() is not null
+                        && UserManager.GetAccessLevel().HasFlag(MembershipAccessType.Owner))
+                {
+                    <DropdownItem Style="cursor:pointer" Clicked="@(() => Navigation.NavigateTo("/options/billing"))">
+                        <div class="usermenu_item">
+                            <span>Тарифы и Платежи</span>
+                        </div>
+                    </DropdownItem>
+                }
+                <DropdownDivider />
+                <DropdownItem Style="cursor:pointer" Clicked="@(async () => await SignManager.BeginLogoutAsync())">
+                    <div class="usermenu_item">
+                        <span>Выйти</span>
+                    </div>
+                </DropdownItem>
+            </BarDropdownMenu>
+        </BarDropdown>
+    </Authorized>
+    <NotAuthorized>
+        <Button Clicked="@(() => Navigation.NavigateTo("authentication/login"))" Size="Size.Small" Style="background-color:lightgrey">
+            <div class="usertoggle_login-block">
+                <div style="margin-right:6px">
+                    <Icon Name="@("fa-sign-in-alt")" IconStyle="IconStyle.Solid" />
+                </div>
+                <span>Войти</span>
+            </div>
+        </Button>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code
+{
+    [CascadingParameter]
+    public Task<AuthenticationState> AuthState { get; set; }
+
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private AuthenticationState _authState;
+
+    private string _avatarUrl;
+
+    protected async override Task OnInitializedAsync()
+    {
+        _authState = await AuthState;
+
+        string claimsPicture = _authState.User.Claims
+            .FirstOrDefault(claim => claim.Type == CustomClaimNames.picture)?.Value;
+
+        _avatarUrl = string.IsNullOrEmpty(claimsPicture) ? _avatarUrl = "./img/blank_avatar.png" : claimsPicture;
+
+        //без этого не обновляется после обращений к AppState
+        StateHasChanged();
+
+        await base.OnInitializedAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _authState = await AuthState;
+            StateHasChanged();
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+}

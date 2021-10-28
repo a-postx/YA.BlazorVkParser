@@ -1,0 +1,370 @@
+﻿@using AutoMapper
+@using System.ComponentModel
+@using YA.WebClient.Application
+@using YA.WebClient.Application.Models.SaveModels
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Extensions
+@using YA.WebClient.Application.Caches
+
+@inject VkOneTimeParsingTaskModal AddVkAdsExportModal
+@inject IJSRuntime JS
+@inject IMapper Mapper
+@inject IThemeOptionsState ThemeOptions
+
+@implements IDisposable
+
+@inherits BaseParsingTaskModal
+
+<Modal @ref="_modal" Closing="@OnModalClosing" ShowBackdrop="true">
+    <ModalContent Centered="true" Size="ModalSize.Default" Class="@ThemeOptions.ModalContentClass">
+        <ModalHeader>
+            <ModalTitle>Загрузить в рекламный кабинет ВКонтакте</ModalTitle>
+            <CloseButton Clicked="@CloseModal" AutoClose="true" />
+        </ModalHeader>
+        <ModalBody MaxHeight="65">
+            <ModalApiIssueAlert @ref="_modalAlert" />
+            <Alert Dismisable="false" Background="Background.Warning" Visible="true">
+                Обращаем ваше внимание на то, что у рекламного кабинета возможна значительная задержка обновления цифры количества ID пользователей в группе ретаргета. Эта задержка происходит только при отображении, сами данные в аудитории доступны для использования сразу после загрузки.
+            </Alert>
+            <Validations Mode="ValidationMode.Manual" @ref="_addVkAdsExportTaskModalValidation" Model="@_addVkAdsExportModal">
+                <Validation Validator="@ValidateVkAdsAccountOption">
+                    <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters" Style="margin-bottom:0.5rem">
+                        <FieldLabel ColumnSize="ColumnSize.Is6">Рекламный кабинет</FieldLabel>
+                        <FieldBody ColumnSize="ColumnSize.Is6">
+                            <Select TValue="long" 
+                                    SelectedValue="@_addVkAdsExportModal.VkAdsAccountId"
+                                    SelectedValueChanged="@(async (v) => await OnAccountChangedAsync(v))"
+                                    Disabled="@(_addVkAdsExportModal.AvailableVkAdsAccounts == null)">
+                                @if (_addVkAdsExportModal.AvailableVkAdsAccounts == null)
+                                {
+                                    <SelectItem TValue="long" Value="0"><Text>загрузка...</Text></SelectItem>
+                                }
+                                else
+                                {
+                                    <SelectItem Value="0"><Text></Text></SelectItem>
+                                    @foreach (VkAdsAccountVm account in _addVkAdsExportModal.AvailableVkAdsAccounts)
+                                    {
+                                        <SelectItem Value="@account.Id"><Text>@account.Name</Text></SelectItem>
+                                    }
+                                }
+                            </Select>
+                        </FieldBody>
+                    </Field>
+                </Validation>
+
+                @if (_addVkAdsExportModal.VkAdsTargetGroupsSelectorVisible)
+                {
+                    <Validation Validator="@ValidateVkAdsTargetGroupOption">
+                        <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters" Style="margin-bottom:0.5rem">
+                            <FieldLabel ColumnSize="ColumnSize.Is6">Группа аудитории</FieldLabel>
+                            <FieldBody ColumnSize="ColumnSize.Is6">
+                                <Select TValue="long"
+                                        SelectedValue="@_addVkAdsExportModal.VkAdsTargetGroupId"
+                                        SelectedValueChanged="@OnTargetGroupChanged"
+                                        Disabled="@(_addVkAdsExportModal.AvailableVkAdsTargetGroups == null)">
+                                    @if (_addVkAdsExportModal.AvailableVkAdsTargetGroups == null)
+                                    {
+                                        <SelectItem TValue="long" Value="0"><Text>загрузка...</Text></SelectItem>
+                                    }
+                                    else
+                                    {
+                                        <SelectItem TValue="long" Value="0"><Text></Text></SelectItem>
+                                        <SelectItem TValue="long" Value="-1" Style="color:#0073BB"><Text>Создать новую</Text></SelectItem>
+                                        @foreach (VkAdsTargetGroupVm targetGroup in _addVkAdsExportModal.AvailableVkAdsTargetGroups)
+                                        {
+                                            <SelectItem TValue="long" Value="@targetGroup.Id"><Text>@targetGroup.Name</Text></SelectItem>
+                                        }
+                                    }
+                                </Select>
+                            </FieldBody>
+                        </Field>
+                    </Validation>
+                }
+                @if (_addVkAdsExportModal.NewTargetGroupNameSelectorVisible)
+                {
+                    <Validation Validator="@ValidateNewVkAdsTargetGroupNameOption">
+                        <Field ColumnSize="ColumnSize.Is12" Horizontal="true" Class="no-gutters" Style="margin-bottom:0.5rem">
+                            <FieldLabel ColumnSize="ColumnSize.Is6">Имя новой группы аудитории</FieldLabel>
+                            <FieldBody ColumnSize="ColumnSize.Is6">
+                                <TextEdit Display="Display.InlineBlock"
+                                          Text="@_addVkAdsExportModal.NewTargetGroupName"
+                                          TextChanged="@OnNewTargetGroupNameChanged">
+                                    <Feedback>
+                                        <ValidationError Tooltip="false" />
+                                    </Feedback>
+                                </TextEdit>
+                            </FieldBody>
+                        </Field>
+                    </Validation>
+                }
+                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                    <FieldLabel Class="boldtext">Название задачи</FieldLabel>
+                    <FieldBody>
+                        <TextEdit Text="@_addVkAdsExportModal.OptionsSmTitleRawInput"
+                                  TextChanged="@_addVkAdsExportModal.OnTaskNameChangedOnExportTask"
+                                  Placeholder="Введите название...">
+                        </TextEdit>
+                    </FieldBody>
+                </Field>
+            </Validations>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Secondary" Clicked="CloseModal">Закрыть</Button>
+            <Button Color="Color.Primary"
+                    Loading="@_submitButtonIsLoading"
+                    Disabled="@_addVkAdsExportModal.SubmitButtonDisabled"
+                    Clicked="@(() => OnAddVkAdsExportTask())">
+                Добавить
+            </Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+@code
+{
+    [Parameter]
+    public EventCallback<VkOneTimeParsingTaskVm> OnTaskCreatedCallback { get; set; }
+
+    private Modal _modal;
+
+    private Validations _addVkAdsExportTaskModalValidation;
+
+    private bool _submitButtonIsLoading = false;
+
+    private VkOneTimeParsingTaskModal _addVkAdsExportModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _addVkAdsExportModal = AddVkAdsExportModal;
+
+        await base.OnInitializedAsync();
+    }
+
+    public void Hide()
+    {
+        CloseModal();
+    }
+
+    private void OnModalClosing(CancelEventArgs e)
+    {
+        // just set Cancel to true to prevent modal from closing
+        //e.Cancel = true;
+    }
+
+    private void CloseModal()
+    {
+        _modalAlert.Hide();
+        Reset();
+        _modal.Hide();
+    }
+
+    public void ShowWithModel(VkOneTimeParsingTaskVm parsingTaskVm)
+    {
+        _addVkAdsExportModal.LoadModel(parsingTaskVm);
+
+        _addVkAdsExportModal.UpdateOptionsVisibility();
+
+        _modalAlert.Hide();
+
+        _addVkAdsExportTaskModalValidation.ClearAll();
+        _modal.Show();
+
+        bool blazoriseValid = _addVkAdsExportTaskModalValidation.ValidateAll();
+        //валидация блейзорайс не всё может проверить, дополняем ручными
+        bool customValid = _addVkAdsExportModal.ValidateUpdatedModalOptions();
+
+        if (customValid && blazoriseValid)
+        {
+            _addVkAdsExportModal.SubmitButtonDisabled = false;
+        }
+
+        StateHasChanged();
+    }
+
+    public async Task ShowWithTaskSource(VkOneTimeParsingTaskVm sourceParsingTaskVm)
+    {
+        _addVkAdsExportModal.SetDefaultVkAdsExportOptions("Экспорт в РК - " + sourceParsingTaskVm.Title);
+
+        if (sourceParsingTaskVm != null)
+        {
+            VkQuickParsingTaskVm sourceQuickVm = Mapper.Map<VkQuickParsingTaskVm>(sourceParsingTaskVm);
+
+            _selectedTasks.Add(sourceQuickVm);
+
+            _addVkAdsExportModal.AddTasksAsSources(_selectedTasks, true);
+        }
+
+        _addVkAdsExportTaskModalValidation.ClearAll();
+        _modal.Show();
+
+        await _addVkAdsExportModal.SetExportToVkAdsOnExportTask(true);
+        _addVkAdsExportTaskModalValidation.ValidateAll();
+        StateHasChanged();
+    }
+
+    public async Task GetFreshVkAdsOptions()
+    {
+        await _addVkAdsExportModal.GetAvailableVkAdsParams();
+    }
+
+    private void ValidateVkAdsAccountOption(ValidatorEventArgs e)
+    {
+        long value = Convert.ToInt64(e.Value);
+
+        if (_addVkAdsExportModal.ExportToVkAds)
+        {
+            e.Status = (value != 0) ? ValidationStatus.Success : ValidationStatus.Error;
+        }
+        else
+        {
+            e.Status = ValidationStatus.None;
+        }
+    }
+
+    private void ValidateVkAdsTargetGroupOption(ValidatorEventArgs e)
+    {
+        long value = Convert.ToInt64(e.Value);
+
+        if (_addVkAdsExportModal.ExportToVkAds && _addVkAdsExportModal.VkAdsAccountId != 0)
+        {
+            e.Status = (value != 0) ? ValidationStatus.Success : ValidationStatus.Error;
+        }
+        else
+        {
+            e.Status = ValidationStatus.None;
+        }
+    }
+
+    private void ValidateNewVkAdsTargetGroupNameOption(ValidatorEventArgs e)
+    {
+        string rawInput = Convert.ToString(e.Value);
+
+        if (_addVkAdsExportModal.CreateNewVkAdsTargetGroup)
+        {
+            if (!string.IsNullOrEmpty(rawInput) && rawInput.Length <= 64)
+            {
+                e.Status = ValidationStatus.Success;
+            }
+            else
+            {
+                e.Status = ValidationStatus.Error;
+            }
+        }
+        else
+        {
+            e.Status = ValidationStatus.None;
+        }
+    }
+
+    private async Task OnAccountChangedAsync(long value)
+    {
+        await _addVkAdsExportModal.OnVkAdsAccountChangedOnExportTaskAsync(value);
+        _addVkAdsExportModal.UpdateOptionsVisibility();
+
+        bool validated = _addVkAdsExportTaskModalValidation.ValidateAll();
+
+        if (validated && (_addVkAdsExportModal.VkAdsTargetGroup != null || _addVkAdsExportModal.VkAdsTargetGroupId == -1))
+        {
+            _addVkAdsExportModal.SubmitButtonDisabled = false;
+        }
+        else
+        {
+            _addVkAdsExportModal.SubmitButtonDisabled = true;
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnTargetGroupChanged(long value)
+    {
+        _addVkAdsExportModal.OnVkAdsTargetGroupChangedOnExportTask(value);
+        _addVkAdsExportModal.UpdateOptionsVisibility();
+
+        bool validated = _addVkAdsExportTaskModalValidation.ValidateAll();
+
+        if (validated)
+        {
+            if (_addVkAdsExportModal.CreateNewVkAdsTargetGroup == true)
+            {
+                bool nameIsCompliant = !string.IsNullOrEmpty(_addVkAdsExportModal.NewTargetGroupName)
+                        && _addVkAdsExportModal.NewTargetGroupName.Length <= 64;
+                _addVkAdsExportModal.SubmitButtonDisabled = nameIsCompliant ? false : true;
+            }
+            else
+            {
+                _addVkAdsExportModal.SubmitButtonDisabled = false;
+            }
+        }
+        else
+        {
+            _addVkAdsExportModal.SubmitButtonDisabled = true;
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnNewTargetGroupNameChanged(string value)
+    {
+        _addVkAdsExportModal.OnNewTargetGroupNameChangedOnExportTask(value);
+        bool validated = _addVkAdsExportTaskModalValidation.ValidateAll();
+
+        if (validated)
+        {
+            bool nameIsCompliant = !string.IsNullOrEmpty(_addVkAdsExportModal.NewTargetGroupName)
+                && _addVkAdsExportModal.NewTargetGroupName.Length <= 64;
+            _addVkAdsExportModal.SubmitButtonDisabled = nameIsCompliant ? false : true;
+        }
+        else
+        {
+            _addVkAdsExportModal.SubmitButtonDisabled = true;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnAddVkAdsExportTask()
+    {
+        bool blazoriseValid = _addVkAdsExportTaskModalValidation.ValidateAll();
+        //валидация блейзорайс не всё может проверить, дополняем ручными
+        bool customValid = _addVkAdsExportModal.ValidateUpdatedModalOptions();
+
+        if (customValid && blazoriseValid)
+        {
+            _submitButtonIsLoading = true;
+            _addVkAdsExportModal.SubmitButtonDisabled = true;
+            StateHasChanged();
+
+            VkOneTimeParsingTaskSm vkOneTimeParsingTaskSm = _addVkAdsExportModal.CreateSm();
+
+            ApiCommandResult<VkOneTimeParsingTaskVm> result = await ApiRepository.CreateVkParsingTask(vkOneTimeParsingTaskSm);
+
+            _submitButtonIsLoading = false;
+
+            switch (result.Status)
+            {
+                case ApiCommandStatus.Ok:
+                    CloseModal();
+                    await OnTaskCreatedCallback.InvokeAsync(result.Data);
+                    break;
+
+                default:
+                    _addVkAdsExportModal.SubmitButtonDisabled = false;
+                    break;
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private void Reset()
+    {
+        _addVkAdsExportModal.Reset();
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+    }
+}

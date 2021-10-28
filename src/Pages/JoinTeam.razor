@@ -1,0 +1,187 @@
+﻿@page "/join-team"
+
+@layout EntranceDialogLayout
+
+@using AutoMapper
+@using YA.WebClient.Application.Interfaces
+@using YA.WebClient.Application.Models.ViewModels
+@using YA.WebClient.Application.Enums
+@using YA.WebClient.Application
+@using YA.WebClient.Extensions
+
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IMapper Mapper
+@inject IApiRepository ApiRepository
+@inject IYaSessionStorage YaSessionStorage
+@inject ISignService SignService
+
+<PageApiIssueAlert />
+<div class="row no-gutters">
+    <div class="col-sm-12 col-lg-6 offset-lg-3 col-md-8 offset-md-2">
+        <div class="intro-middle">
+            <Field ColumnSize="ColumnSize.Is12" Class="no-gutters" Style="height:32px">
+                <img class="mb-3" src="/img/logo_wtitle_on_light_32x32.png" />
+            </Field>
+            <Form>
+                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters centered">
+                    <h3 class="font-weight-normal mb-3">Присоединитесь к команде в Venando</h3>
+                </Field>
+                @if (_isLoadingInvitation)
+                {
+                    <Field ColumnSize="ColumnSize.Is12" Class="no-gutters pt-2">
+                        <Wave Size="18px" />
+                    </Field>
+                }
+                else
+                {
+                    @if (_dataNotAvailable)
+                    {
+                        <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                            <Text Margin="Margin.Is2" Style="color:#697280">Нет данных, попробуйте позже</Text>
+                        </Field>
+                    }
+                    else
+                    {
+                        @if (_invitation is not null)
+                        {
+                            @if (_invitation.ExpirationDate.HasValue && _invitation.ExpirationDate.Value < DateTime.UtcNow)
+                            {
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters pt-2">
+                                    <Text Margin="Margin.Is2" Style="font-size:1.25rem" Class="text-danger">Приглашение устарело</Text>
+                                </Field>
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                    <Text Margin="Margin.Is2" Style="color:#697280">Извините, но приглашение уже устарело.</Text>
+                                </Field>
+                            }
+                            else if (_invitation.Claimed)
+                            {
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                    <Text Margin="Margin.Is2" Style="font-size:1.25rem" Class="text-danger">Приглашение ипользовано</Text>
+                                </Field>
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                    <Text Margin="Margin.Is2" Style="color:#697280">Извините, но приглашение уже было использовано кем-то другим.</Text>
+                                </Field>
+                            }
+                            else
+                            {
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters pt-2">
+                                    <Text Margin="Margin.Is2" Class="text-center" Style="color:#697280">Вас пригласил(а)</Text>
+                                </Field>
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters pb-3">
+                                    <Text Margin="Margin.Is2" Class="text-center" Style="color:#697280">@_invitation.InvitedBy</Text>
+                                </Field>
+                                <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                    <AuthorizeView>
+                                        <Authorizing>
+                                            <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                                <Wave Size="18px" />
+                                            </Field>
+                                        </Authorizing>
+                                        <Authorized>
+                                            <Button Block="true"
+                                                    Color="Color.Success"
+                                                    Clicked="@(async () => await JoinAsync())">
+                                                Присоединиться к @_invitation.TenantName
+                                            </Button>
+                                        </Authorized>
+                                        <NotAuthorized>
+                                            <Button Block="true"
+                                                    Color="Color.Success"
+                                                    Clicked="@(async () => await LoginToJoinAsync())">
+                                                Войти или зарегистрироваться, чтобы присоединиться к @_invitation.TenantName
+                                            </Button>
+                                        </NotAuthorized>
+                                    </AuthorizeView>
+                                </Field>
+                            }
+                        }
+                        else
+                        {
+                            <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                <Text Margin="Margin.Is2" Style="font-size:1.25rem" Class="text-danger">Адрес приглашения неверен</Text>
+                            </Field>
+                            <Field ColumnSize="ColumnSize.Is12" Class="no-gutters">
+                                <Text Margin="Margin.Is2" Style="color:#697280">Извините, но приглашение не может быть определено.</Text>
+                            </Field>
+                        }
+                    }
+                }
+            </Form>
+        </div>
+    </div>
+</div>
+
+
+
+@code
+{
+    [CascadingParameter]
+    public UserAndTenantManager UserManager { get; set; }
+
+    private Guid _token;
+    private InvitationVm _invitation;
+
+    private bool _isLoadingInvitation = true;
+    private bool _dataNotAvailable;
+
+    protected override void OnInitialized()
+    {
+        if (Navigation.TryGetQueryString<Guid>("token", out Guid token))
+        {
+            _token = token;
+        }
+
+        base.OnInitialized();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await CheckInvitationAsync();
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task CheckInvitationAsync()
+    {
+        ApiCommandResult<InvitationVm> result = await ApiRepository.GetInvitation(_token);
+
+        switch (result.Status)
+        {
+            case ApiCommandStatus.Ok:
+                _invitation = result.Data;
+                _dataNotAvailable = false;
+                break;
+
+            case ApiCommandStatus.NotFound:
+                _dataNotAvailable = false;
+                break;
+
+            default:
+                _dataNotAvailable = true;
+                break;
+        }
+
+        _isLoadingInvitation = false;
+
+        StateHasChanged();
+    }
+
+    private async Task JoinAsync()
+    {
+        await YaSessionStorage.AddOrReplaceTenantInvitationAsync(_invitation.YaInvitationID);
+
+        await UserManager.PickAndAddTenantMembershipAsync();
+        Navigation.NavigateTo($"/home");
+    }
+
+    private async Task LoginToJoinAsync()
+    {
+        await YaSessionStorage.AddOrReplaceTenantInvitationAsync(_invitation.YaInvitationID);
+
+        SignService.BeginLogin();
+    }
+}

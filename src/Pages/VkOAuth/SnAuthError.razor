@@ -1,0 +1,36 @@
+﻿@page "/vkoauthconnect/snautherror/{RequestId}"
+
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.Extensions.Primitives
+
+@inject NavigationManager Navigation
+
+@attribute [Authorize]
+
+<Field>
+    <Heading Size="HeadingSize.Is3" Class="page-heading">
+        <span class="d-inline-block">Проблема авторизации в соцсети</span>
+    </Heading>
+</Field>
+
+<SnAuthIssue RequestId="@RequestId" AuthErrorDescription="@ErrorMessage" />
+
+@code
+{
+    [Parameter]
+    public string RequestId { get; set; }
+
+    private string ErrorMessage { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Uri uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("errorMessage", out StringValues errorMessage))
+        {
+            ErrorMessage = errorMessage;
+        }
+
+        base.OnParametersSet();
+    }
+}

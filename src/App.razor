@@ -1,0 +1,166 @@
+﻿@using Sotsera.Blazor.Toaster
+
+<CascadingAuthenticationState>
+    <Blazorise.ThemeProvider Theme="@_theme" WriteVariables="true">
+        @* этап определения пользователя и арендатора, установки состояния.
+        Из-за асинхронности страницы инициализируются ещё до окончания установки состояния после логина,
+        поэтому объектам приложения необходимо подписываться на обновления соответствующих данных *@
+        <UserAndTenantManager>
+            <Router AppAssembly="@typeof(Program).Assembly" PreferExactMatches="@true">
+                <Found Context="routeData">
+                    <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(LoadingLayout)">
+                        <Authorizing>
+                            <AuthorizingInProgress />
+                        </Authorizing>
+                        <NotAuthorized>
+                            @if (context.User.Identity?.IsAuthenticated ?? false)
+                            {
+                                <UserNotAuthorized />
+                            }
+                            else
+                            {
+                                <RedirectToLogin />
+                            }
+                        </NotAuthorized>
+                    </AuthorizeRouteView>
+                </Found>
+                <NotFound>
+                    <PageNotFound />
+                </NotFound>
+            </Router>
+        </UserAndTenantManager>
+        <ToastContainer />
+    </Blazorise.ThemeProvider>
+</CascadingAuthenticationState>
+
+@code
+{
+    //https://blog.getbootstrap.com/2020/06/16/bootstrap-5-alpha/
+    private Theme _theme = new Theme
+    {
+        IsRounded = true,
+        Enabled = true,
+
+        ColorOptions = new ThemeColorOptions
+        {
+            Primary = "#0992ba",
+            Secondary = "#969392",
+            //Secondary = ThemeColors.Gray._300.Value,
+            Success = "#53ad57",
+            //Info = "#9F887B",
+            Info = ThemeColors.Cyan._600.Value,
+            Warning = "#ffa200",
+            //Danger = "#F95741",
+            //Light = "#F0F0F0",
+            //Dark = "#535353",
+        },
+        BackgroundOptions = new ThemeBackgroundOptions
+        {
+            Primary = "#0992ba",
+            //Secondary = "#215856"
+            //Body = "#8ECAE6",
+            Warning = "#ffda73"
+        },
+        //TextColorOptions = new ThemeTextColorOptions
+        //{
+        //    Light = "#EEE9F0",
+        //    Dark = "#215856",
+        //},
+
+        // мера затенения кнопок в разных режимах
+        ButtonOptions = new ThemeButtonOptions
+        {
+            HoverDarkenColor = 20f,
+            HoverLightenColor = 25f,
+            ActiveDarkenColor = 25f,
+            ActiveLightenColor = 30f
+        },
+        //DropdownOptions = new ThemeDropdownOptions
+        //{
+        //    GradientBlendPercentage = 15f //default
+        //},
+        InputOptions = new ThemeInputOptions
+        {
+            //Color = "#097392", //цвет текста в формах ввода после потери фокуса
+            CheckColor = "#0992ba"
+        },
+
+        BreakpointOptions = new ThemeBreakpointOptions { },
+        DropdownOptions = new ThemeDropdownOptions { },
+        CardOptions = new ThemeCardOptions { },
+        ModalOptions = new ThemeModalOptions { },
+        TabsOptions = new ThemeTabsOptions { },
+        ProgressOptions = new ThemeProgressOptions { },
+        AlertOptions = new ThemeAlertOptions { },
+        BadgeOptions = new ThemeBadgeOptions { },
+        PaginationOptions = new ThemePaginationOptions { },
+
+        BreadcrumbOptions = new ThemeBreadcrumbOptions
+        {
+            Color = "#0073BB"
+        },
+        //PaginationOptions = new ThemePaginationOptions
+        //{
+        //    LargeBorderRadius = ".3rem"
+        //},
+        TooltipOptions = new ThemeTooltipOptions
+        {
+            BackgroundColor = ThemeColors.BlueGray._900.Value,
+            Color = ThemeColors.BlueGray._100.Value,
+            //BackgroundOpacity = .7f,
+            FadeTime = "0.3s" //default
+        },
+
+        //StepsOptions = new ThemeStepsOptions { },
+        //TableOptions = new ThemeTableOptions { },
+        //SidebarOptions = new ThemeSidebarOptions { },
+
+        //главное меню
+        BarOptions = new ThemeBarOptions
+        {
+            VerticalWidth = "220px",
+            VerticalBrandHeight = "49px",
+            //цвета в режиме ThemeContrast.Light, применяются соответствующие настройки инверсии цвета текста
+            LightColors = new ThemeBarColorOptions
+            {
+                BackgroundColor = "#023047",
+                Color = "#F2E9E4",
+                BrandColorOptions = new ThemeBarBrandColorOptions
+                {
+                    BackgroundColor = "#023047"
+                },
+                ItemColorOptions = new ThemeBarItemColorOptions
+                {
+                    ActiveBackgroundColor = "#219EBC",
+                    ActiveColor = "#F0EFEB",
+                    HoverBackgroundColor = "#4A4E69",
+                    HoverColor = "#FFFFFF"
+                },
+                DropdownColorOptions = new ThemeBarDropdownColorOptions
+                {
+                    BackgroundColor = "#023047"
+                }
+            },
+            DarkColors = new ThemeBarColorOptions
+            {
+                BackgroundColor = "#023047",
+                Color = "#F2E9E4",
+                BrandColorOptions = new ThemeBarBrandColorOptions
+                {
+                    BackgroundColor = "#023047"
+                },
+                ItemColorOptions = new ThemeBarItemColorOptions
+                {
+                    ActiveBackgroundColor = "#219EBC",
+                    ActiveColor = "#F0EFEB",
+                    HoverBackgroundColor = "#4A4E69",
+                    HoverColor = "#FFFFFF"
+                },
+                DropdownColorOptions = new ThemeBarDropdownColorOptions
+                {
+                    BackgroundColor = "#023047"
+                }
+            }
+        }
+    };
+}
