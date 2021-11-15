@@ -1,7 +1,6 @@
-﻿namespace YA.WebClient.Application.Models.Diagnostic
+﻿namespace YA.WebClient.Application.Models.Diagnostic;
+
+public class SecurityInfo
 {
-    public class SecurityInfo
-    {
-        public UserInfo User { get; set; }
-    }
+    public UserInfo User { get; set; }
 }

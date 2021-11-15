@@ -1,9 +1,6 @@
-﻿using System;
+﻿namespace YA.WebClient.Application.Events;
 
-namespace YA.WebClient.Application.Events
+public class ExportToVkAdsChangedEventArgs : EventArgs
 {
-    public class ExportToVkAdsChangedEventArgs : EventArgs
-    {
-        public bool Value { get; set; }
-    }
+    public bool Value { get; set; }
 }

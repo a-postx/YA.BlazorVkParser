@@ -1,12 +1,10 @@
-﻿using System.Threading.Tasks;
-using YA.WebClient.Application.Models.Diagnostic;
+﻿using YA.WebClient.Application.Models.Diagnostic;
 using YA.WebClient.Application.Models.Dto;
 
-namespace YA.WebClient.Application.Interfaces
+namespace YA.WebClient.Application.Interfaces;
+
+public interface IEnvironmentContext
 {
-    public interface IEnvironmentContext
-    {
-        Task<ClientInfo> GetClientInfoAsync();
-        Task<DiagnosticInfo> GetDiagnosticInfoAsync();
-    }
+    Task<ClientInfo> GetClientInfoAsync();
+    Task<DiagnosticInfo> GetDiagnosticInfoAsync();
 }

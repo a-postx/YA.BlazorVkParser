@@ -1,39 +1,34 @@
-﻿using System;
-using YA.WebClient.Application.Events;
-using YA.WebClient.Application.Interfaces;
+﻿namespace YA.WebClient.Application.States;
 
-namespace YA.WebClient.Application.States
+public class NotificationsPanelState : INotificationsPanelState, IDisposable
 {
-    public class NotificationsPanelState : INotificationsPanelState, IDisposable
+    private bool _visible;
+
+    public bool Visible
     {
-        private bool _visible;
-
-        public bool Visible
+        get
         {
-            get
-            {
-                return _visible;
-            }
+            return _visible;
         }
+    }
 
-        public event EventHandler<NotificationsPanelVisibilityChangedEventArgs> VisibilityUpdated;
+    public event EventHandler<NotificationsPanelVisibilityChangedEventArgs> VisibilityUpdated;
 
-        public void UpdateVisibility(bool visible)
-        {
-            _visible = visible;
+    public void UpdateVisibility(bool visible)
+    {
+        _visible = visible;
 
-            VisibilityUpdated?.Invoke(this, new NotificationsPanelVisibilityChangedEventArgs { Visible = _visible });
-        }
+        VisibilityUpdated?.Invoke(this, new NotificationsPanelVisibilityChangedEventArgs { Visible = _visible });
+    }
 
-        protected virtual void Dispose(bool disposing)
-        {
-            _visible = false;
-        }
+    protected virtual void Dispose(bool disposing)
+    {
+        _visible = false;
+    }
 
-        public void Dispose()
-        {
-            Dispose(disposing: true);
-            GC.SuppressFinalize(this);
-        }
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }

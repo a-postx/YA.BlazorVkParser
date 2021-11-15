@@ -1,20 +1,17 @@
-﻿using YA.WebClient.Application.Enums;
+﻿namespace YA.WebClient.Application.Models.ViewModels;
 
-namespace YA.WebClient.Application.Models.ViewModels
+/// <summary>
+/// Настройки парсинга для типа результата "Сообщества-ПоискЦА".
+/// </summary>
+public class VkTaCommunitiesOptionsVm
 {
     /// <summary>
-    /// Настройки парсинга для типа результата "Сообщества-ПоискЦА".
+    /// Тип результата сбора сообществ с учётом топа интересных страниц.
     /// </summary>
-    public class VkTaCommunitiesOptionsVm
-    {
-        /// <summary>
-        /// Тип результата сбора сообществ с учётом топа интересных страниц.
-        /// </summary>
-        public VkParsingTaskResultCommunitiesTopType TopType { get; set; }
+    public VkParsingTaskResultCommunitiesTopType TopType { get; set; }
 
-        /// <summary>
-        /// Число сообществ в результате анализа.
-        /// </summary>
-        public int CommunitiesCount { get; set; }
-    }
+    /// <summary>
+    /// Число сообществ в результате анализа.
+    /// </summary>
+    public int CommunitiesCount { get; set; }
 }

@@ -1,61 +1,57 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+﻿namespace YA.WebClient.Application;
 
-namespace YA.WebClient.Application
+public abstract class ValueObject
 {
-    public abstract class ValueObject
+    protected static bool EqualOperator(ValueObject left, ValueObject right)
     {
-        protected static bool EqualOperator(ValueObject left, ValueObject right)
+        if (left is null ^ right is null)
         {
-            if (left is null ^ right is null)
-            {
-                return false;
-            }
-            return left is null || left.Equals(right);
+            return false;
+        }
+        return left is null || left.Equals(right);
+    }
+
+    protected static bool NotEqualOperator(ValueObject left, ValueObject right)
+    {
+        return !(EqualOperator(left, right));
+    }
+
+    protected abstract IEnumerable<object> GetAtomicValues();
+
+    public override bool Equals(object obj)
+    {
+        if (obj == null || obj.GetType() != GetType())
+        {
+            return false;
         }
 
-        protected static bool NotEqualOperator(ValueObject left, ValueObject right)
+        ValueObject other = (ValueObject)obj;
+
+        using (IEnumerator<object> thisValues = GetAtomicValues().GetEnumerator())
+        using (IEnumerator<object> otherValues = other.GetAtomicValues().GetEnumerator())
         {
-            return !(EqualOperator(left, right));
-        }
-
-        protected abstract IEnumerable<object> GetAtomicValues();
-
-        public override bool Equals(object obj)
-        {
-            if (obj == null || obj.GetType() != GetType())
+            while (thisValues.MoveNext() && otherValues.MoveNext())
             {
-                return false;
-            }
-
-            ValueObject other = (ValueObject)obj;
-
-            using (IEnumerator<object> thisValues = GetAtomicValues().GetEnumerator())
-            using (IEnumerator<object> otherValues = other.GetAtomicValues().GetEnumerator())
-            {
-                while (thisValues.MoveNext() && otherValues.MoveNext())
+                if (thisValues.Current is null ^
+                    otherValues.Current is null)
                 {
-                    if (thisValues.Current is null ^
-                        otherValues.Current is null)
-                    {
-                        return false;
-                    }
-
-                    if (thisValues.Current != null &&
-                        !thisValues.Current.Equals(otherValues.Current))
-                    {
-                        return false;
-                    }
+                    return false;
                 }
-                return !thisValues.MoveNext() && !otherValues.MoveNext();
-            }
-        }
 
-        public override int GetHashCode()
-        {
-            return GetAtomicValues()
-                .Select(x => x != null ? x.GetHashCode() : 0)
-                .Aggregate((x, y) => x ^ y);
+                if (thisValues.Current != null &&
+                    !thisValues.Current.Equals(otherValues.Current))
+                {
+                    return false;
+                }
+            }
+            return !thisValues.MoveNext() && !otherValues.MoveNext();
         }
+    }
+
+    public override int GetHashCode()
+    {
+        return GetAtomicValues()
+            .Select(x => x != null ? x.GetHashCode() : 0)
+            .Aggregate((x, y) => x ^ y);
     }
 }

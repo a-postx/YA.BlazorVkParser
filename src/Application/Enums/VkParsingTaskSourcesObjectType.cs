@@ -1,10 +1,9 @@
-﻿namespace YA.WebClient.Application.Enums
+﻿namespace YA.WebClient.Application.Enums;
+
+public enum VkParsingTaskSourcesObjectType
 {
-    public enum VkParsingTaskSourcesObjectType
-    {
-        Unknown = 0,
-        Group = 1,
-        User = 2,
-        Keyword = 3
-    }
+    Unknown = 0,
+    Group = 1,
+    User = 2,
+    Keyword = 3
 }

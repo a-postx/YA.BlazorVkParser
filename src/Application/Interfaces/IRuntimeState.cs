@@ -1,44 +1,38 @@
-﻿using System;
-using System.Collections.Generic;
-using YA.WebClient.Application.Events;
-using YA.WebClient.Application.Models.ViewModels;
+﻿namespace YA.WebClient.Application.Interfaces;
 
-namespace YA.WebClient.Application.Interfaces
+public interface IRuntimeState
 {
-    public interface IRuntimeState
-    {
-        event EventHandler LoginRedirectLaunchedUpdated;
-        event EventHandler UserUpdated;
-        event EventHandler<TenantUpdatedEventArgs> TenantUpdated;
-        event EventHandler<MembershipUpdatedEventArgs> MembershipUpdated;
-        event EventHandler<TenantsUpdatedEventArgs> TenantsUpdated;
-        event EventHandler PricingTierUpdated;
+    event EventHandler LoginRedirectLaunchedUpdated;
+    event EventHandler UserUpdated;
+    event EventHandler<TenantUpdatedEventArgs> TenantUpdated;
+    event EventHandler<MembershipUpdatedEventArgs> MembershipUpdated;
+    event EventHandler<TenantsUpdatedEventArgs> TenantsUpdated;
+    event EventHandler PricingTierUpdated;
 
-        bool GetLoginRedirectLaunched();
-        void PutLoginRedirectLaunched(bool value);
+    bool GetLoginRedirectLaunched();
+    void PutLoginRedirectLaunched(bool value);
 
-        UserVm GetUser();
-        void PutUser(UserVm user);
-        void RemoveUser();
+    UserVm GetUser();
+    void PutUser(UserVm user);
+    void RemoveUser();
 
-        TenantVm GetTenant();
-        void PutTenant(TenantVm tenant);
-        void RemoveTenant();
+    TenantVm GetTenant();
+    void PutTenant(TenantVm tenant);
+    void RemoveTenant();
 
-        ICollection<TenantVm> GetTenants();
-        void PutTenants(ICollection<TenantVm> tenants);
-        void RemoveTenants();
+    ICollection<TenantVm> GetTenants();
+    void PutTenants(ICollection<TenantVm> tenants);
+    void RemoveTenants();
 
-        MembershipVm GetMembership();
-        void PutMembership(MembershipVm membership);
-        void RemoveMembership();
+    MembershipVm GetMembership();
+    void PutMembership(MembershipVm membership);
+    void RemoveMembership();
 
-        PricingTierVm GetPricingTier();
-        void PutPricingTier(PricingTierVm pricingTier);
-        void RemovePricingTier();
+    PricingTierVm GetPricingTier();
+    void PutPricingTier(PricingTierVm pricingTier);
+    void RemovePricingTier();
 
-        VkAccessTokenVm GetVkAccessToken();
-        void AddVkAccessToken(VkAccessTokenVm token);
-        void RemoveVkAccessToken();
-    }
+    VkAccessTokenVm GetVkAccessToken();
+    void AddVkAccessToken(VkAccessTokenVm token);
+    void RemoveVkAccessToken();
 }

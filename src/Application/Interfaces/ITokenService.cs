@@ -1,11 +1,7 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿namespace YA.WebClient.Application.Interfaces;
 
-namespace YA.WebClient.Application.Interfaces
+public interface ITokenService
 {
-    public interface ITokenService
-    {
-        Task<Guid> GetTenantIdAsync();
-        Task<string> GetTokenAsync();
-    }
+    Task<Guid> GetTenantIdAsync();
+    Task<string> GetTokenAsync();
 }

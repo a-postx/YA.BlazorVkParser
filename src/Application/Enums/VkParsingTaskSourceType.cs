@@ -1,9 +1,8 @@
-﻿namespace YA.WebClient.Application.Enums
+﻿namespace YA.WebClient.Application.Enums;
+
+public enum VkParsingTaskSourceType
 {
-    public enum VkParsingTaskSourceType
-    {
-        Unknown = 0,
-        Links = 1,
-        Tasks = 2
-    }
+    Unknown = 0,
+    Links = 1,
+    Tasks = 2
 }

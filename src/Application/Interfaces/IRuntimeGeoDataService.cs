@@ -1,11 +1,8 @@
-﻿using System.Threading;
-using System.Threading.Tasks;
-using YA.WebClient.Application.Models.Dto;
+﻿using YA.WebClient.Application.Models.Dto;
 
-namespace YA.WebClient.Application.Interfaces
+namespace YA.WebClient.Application.Interfaces;
+
+public interface IRuntimeGeoDataService
 {
-    public interface IRuntimeGeoDataService
-    {
-        Task<GeoInfo> GetGeoInfoAsync(CancellationToken cancellationToken);
-    }
+    Task<GeoInfo> GetGeoInfoAsync(CancellationToken cancellationToken);
 }

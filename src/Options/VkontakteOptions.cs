@@ -1,9 +1,8 @@
-﻿namespace YA.WebClient.Options
+﻿namespace YA.WebClient.Options;
+
+public class VkontakteOptions
 {
-    public class VkontakteOptions
-    {
-        public int VkApplicationId { get; set; }
-        public string VkCodeRequestRedirectUrlPath { get; set; }
-        public string VkAuthorizationRequestUrl { get; set; }
-    }
+    public int VkApplicationId { get; set; }
+    public string VkCodeRequestRedirectUrlPath { get; set; }
+    public string VkAuthorizationRequestUrl { get; set; }
 }

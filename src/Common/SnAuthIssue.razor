@@ -1,6 +1,4 @@
-﻿@using YA.WebClient.Application.Interfaces
-
-@inject NavigationManager Navigation
+﻿@inject NavigationManager Navigation
 @inject IVkTokenService VkTokenService
 
 <Alert Padding="Padding.Is4" Color="Color.Dark" Dismisable="false" Visible="@(AuthErrorDescription != string.Empty ? true : false)">

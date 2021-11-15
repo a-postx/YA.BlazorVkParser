@@ -1,9 +1,8 @@
-﻿namespace YA.WebClient.Application.Enums
+﻿namespace YA.WebClient.Application.Enums;
+
+public enum VkParsingTaskResultCommunitiesSubType
 {
-    public enum VkParsingTaskResultCommunitiesSubType
-    {
-        Unknown = 0,
-        TaIntersection = 1,
-        CommunitiesSearch = 2
-    }
+    Unknown = 0,
+    TaIntersection = 1,
+    CommunitiesSearch = 2
 }

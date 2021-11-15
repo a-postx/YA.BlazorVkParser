@@ -1,12 +1,7 @@
-﻿using System;
-using System.Threading.Tasks;
-using YA.WebClient.Application.Models.ViewModels;
+﻿namespace YA.WebClient.Application.Interfaces;
 
-namespace YA.WebClient.Application.Interfaces
+public interface IVkTokenService
 {
-    public interface IVkTokenService
-    {
-        Task GetVkCode(string redirectAddress);
-        Task<(VkAccessTokenVm, string, Guid)> RequestAndSaveVkAccessToken(string code);
-    }
+    Task GetVkCode(string redirectAddress);
+    Task<(VkAccessTokenVm, string, Guid)> RequestAndSaveVkAccessToken(string code);
 }

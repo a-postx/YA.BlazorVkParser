@@ -1,6 +1,4 @@
-﻿@using System.Threading
-
-@implements IDisposable
+﻿@implements IDisposable
 
 <Dropdown Direction="Direction.Down" RightAligned="true" Margin="Margin.Is0">
     <Button Class="unselectable" Size="Size.Small" Color="Color.Info" Clicked="@(async () => await OnNeedRefreshCallback.InvokeAsync())">

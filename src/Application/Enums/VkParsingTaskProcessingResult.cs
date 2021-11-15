@@ -1,9 +1,8 @@
-﻿namespace YA.WebClient.Application.Enums
+﻿namespace YA.WebClient.Application.Enums;
+
+public enum VkParsingTaskProcessingResult
 {
-    public enum VkParsingTaskProcessingResult
-    {
-        Unknown = 0,
-        Success = 1,
-        Failed = 2
-    }
+    Unknown = 0,
+    Success = 1,
+    Failed = 2
 }

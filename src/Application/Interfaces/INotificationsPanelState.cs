@@ -1,15 +1,11 @@
-﻿using System;
-using YA.WebClient.Application.Events;
+﻿namespace YA.WebClient.Application.Interfaces;
 
-namespace YA.WebClient.Application.Interfaces
+public interface INotificationsPanelState
 {
-    public interface INotificationsPanelState
-    {
-        bool Visible { get; }
+    bool Visible { get; }
 
-        event EventHandler<NotificationsPanelVisibilityChangedEventArgs> VisibilityUpdated;
+    event EventHandler<NotificationsPanelVisibilityChangedEventArgs> VisibilityUpdated;
 
-        void Dispose();
-        void UpdateVisibility(bool visible);
-    }
+    void Dispose();
+    void UpdateVisibility(bool visible);
 }

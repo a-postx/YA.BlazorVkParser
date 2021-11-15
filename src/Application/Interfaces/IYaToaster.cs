@@ -1,7 +1,6 @@
-﻿namespace YA.WebClient.Application.Interfaces
+﻿namespace YA.WebClient.Application.Interfaces;
+
+public interface IYaToaster
 {
-    public interface IYaToaster
-    {
-        void Success(string message);
-    }
+    void Success(string message);
 }

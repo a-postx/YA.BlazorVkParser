@@ -1,9 +1,8 @@
-﻿namespace YA.WebClient.Application.Enums
+﻿namespace YA.WebClient.Application.Enums;
+
+public enum VkParsingTaskCommunitySearchSearchType
 {
-    public enum VkParsingTaskCommunitySearchSearchType
-    {
-        Unknown = 0,
-        Vkontakte = 1,
-        Internal = 2
-    }
+    Unknown = 0,
+    Vkontakte = 1,
+    Internal = 2
 }

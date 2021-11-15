@@ -15,6 +15,9 @@ dotnet_diagnostic.CA1031.severity = suggestion
 # CA1822: Mark members as static
 dotnet_diagnostic.CA1822.severity = suggestion
 
+# CA1848: Use the LoggerMessage delegates
+dotnet_diagnostic.CA1848.severity = none
+
 # CA1717: Only FlagsAttribute enums should have plural names
 dotnet_diagnostic.CA1717.severity = suggestion
 
@@ -45,6 +48,9 @@ dotnet_diagnostic.CA5351.severity = suggestion
 # CA1000: Do not declare static members on generic types
 dotnet_diagnostic.CA1000.severity = suggestion
 
+[*.{cs,csx,cake,vb,vbx}]
+# Undocumented
+csharp_style_namespace_declarations = file_scoped:warning
 # Private field underscore naming by default
 # https://stackoverflow.com/a/49428349/11001148
 dotnet_naming_rule.private_members_with_underscore.symbols  = private_fields
@@ -54,3 +60,9 @@ dotnet_naming_symbols.private_fields.applicable_kinds           = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 dotnet_naming_style.prefix_underscore.capitalization = camel_case
 dotnet_naming_style.prefix_underscore.required_prefix = _
+# "this." and "Me." qualifiers
+# https://docs.microsoft.com/visualstudio/ide/editorconfig-language-conventions#this-and-me
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning

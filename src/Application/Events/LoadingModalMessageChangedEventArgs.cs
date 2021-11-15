@@ -1,9 +1,6 @@
-﻿using System;
+﻿namespace YA.WebClient.Application.Events;
 
-namespace YA.WebClient.Application.Events
+public class LoadingModalMessageChangedEventArgs : EventArgs
 {
-    public class LoadingModalMessageChangedEventArgs : EventArgs
-    {
-        public string Message { get; set; }
-    }
+    public string Message { get; set; }
 }

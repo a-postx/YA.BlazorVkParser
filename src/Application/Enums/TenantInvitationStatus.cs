@@ -1,9 +1,8 @@
-﻿namespace YA.WebClient.Application.Enums
+﻿namespace YA.WebClient.Application.Enums;
+
+public enum TenantInvitationStatus
 {
-    public enum TenantInvitationStatus
-    {
-        Unknown = 0,
-        New = 1,
-        Sent = 2
-    }
+    Unknown = 0,
+    New = 1,
+    Sent = 2
 }

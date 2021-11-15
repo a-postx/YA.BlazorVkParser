@@ -2,7 +2,7 @@
 
   <PropertyGroup>
 	<TargetFramework>net6.0</TargetFramework>
-    <Version>0.1.25.0</Version>
+    <Version>1.0.0.0</Version>
 	<BlazorEnableCompression>true</BlazorEnableCompression>
 	<Company>Delobytes</Company>
 	<Product>YA.WebClient</Product>
@@ -19,22 +19,22 @@
     <PackageReference Include="Blazored.LocalStorage" Version="4.1.5" />
     <PackageReference Include="Blazored.SessionStorage" Version="2.2.0" />
     <PackageReference Include="Blazored.Typeahead" Version="4.6.0" />
-    <PackageReference Include="Blazorise.Bootstrap" Version="0.9.4.7" />
-    <PackageReference Include="Blazorise.Components" Version="0.9.4.7" />
-    <PackageReference Include="Blazorise.DataGrid" Version="0.9.4.7" />
-    <PackageReference Include="Blazorise.Icons.FontAwesome" Version="0.9.4.7" />
-    <PackageReference Include="Blazorise.Sidebar" Version="0.9.4.7" />
+    <PackageReference Include="Blazorise.Bootstrap" Version="0.9.4.8" />
+    <PackageReference Include="Blazorise.Components" Version="0.9.4.8" />
+    <PackageReference Include="Blazorise.DataGrid" Version="0.9.4.8" />
+    <PackageReference Include="Blazorise.Icons.FontAwesome" Version="0.9.4.8" />
+    <PackageReference Include="Blazorise.Sidebar" Version="0.9.4.8" />
     <PackageReference Include="BlazorPro.Spinkit" Version="1.2.0" />
     <PackageReference Include="CurrieTechnologies.Razor.PageVisibility" Version="1.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="6.0.0-rc.2.21480.10" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Authentication" Version="6.0.0-rc.2.21480.10" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="6.0.0-rc.2.21480.10" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.AspNetCore.JsonPatch" Version="6.0.0-rc.2.21480.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="6.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Authentication" Version="6.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="6.0.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.JsonPatch" Version="6.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.WebUtilities" Version="2.2.0" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="6.0.0-rc.2.21480.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="6.0.0" />
     <PackageReference Include="Sotsera.Blazor.Toaster" Version="3.0.0" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.12.2" />
-    <PackageReference Include="System.Net.Http.Json" Version="6.0.0-rc.2.21480.5" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.14.1" />
+    <PackageReference Include="System.Net.Http.Json" Version="6.0.0" />
     <PackageReference Include="Toolbelt.Blazor.LoadingBar" Version="13.1.1" />
     <PackageReference Include="YA.Common" Version="1.0.7" />
   </ItemGroup>

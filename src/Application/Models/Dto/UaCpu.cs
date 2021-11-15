@@ -1,7 +1,6 @@
-﻿namespace YA.WebClient.Application.Models.Dto
+﻿namespace YA.WebClient.Application.Models.Dto;
+
+public class UaCpu
 {
-    public class UaCpu
-    {
-        public string Architecture { get; set; }
-    }
+    public string Architecture { get; set; }
 }

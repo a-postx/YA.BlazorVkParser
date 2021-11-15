@@ -1,9 +1,6 @@
-﻿using System.Threading.Tasks;
+﻿namespace YA.WebClient.Application.Interfaces;
 
-namespace YA.WebClient.Application.Interfaces
+public interface IWarmupDiService
 {
-    public interface IWarmupDiService
-    {
-        Task WarmUpAllAsync();
-    }
+    Task WarmUpAllAsync();
 }

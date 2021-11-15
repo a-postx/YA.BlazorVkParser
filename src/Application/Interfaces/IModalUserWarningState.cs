@@ -1,17 +1,13 @@
-﻿using System;
-using YA.WebClient.Application.Enums;
+﻿namespace YA.WebClient.Application.Interfaces;
 
-namespace YA.WebClient.Application.Interfaces
+public interface IModalUserWarningState
 {
-    public interface IModalUserWarningState
-    {
-        ApiCommandStatus Status { get; }
-        string ErrorMessage { get; }
-        Guid? RequestId { get; }
+    ApiCommandStatus Status { get; }
+    string ErrorMessage { get; }
+    Guid? RequestId { get; }
 
-        event EventHandler PropertiesUpdated;
+    event EventHandler PropertiesUpdated;
 
-        void Update(ApiCommandStatus status, string errorText, Guid? requestId);
-        void Clear();
-    }
+    void Update(ApiCommandStatus status, string errorText, Guid? requestId);
+    void Clear();
 }

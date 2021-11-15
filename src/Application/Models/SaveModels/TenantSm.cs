@@ -1,25 +1,22 @@
-﻿using System.Collections.Generic;
+﻿namespace YA.WebClient.Application.Models.SaveModels;
 
-namespace YA.WebClient.Application.Models.SaveModels
+/// <summary>
+/// Арендатор, модель сохранения.
+/// </summary>
+public class TenantSm : ValueObject
 {
-    /// <summary>
-    /// Арендатор, модель сохранения.
-    /// </summary>
-    public class TenantSm : ValueObject
+    public TenantSm(string name)
     {
-        public TenantSm(string name)
-        {
-            Name = name;
-        }
+        Name = name;
+    }
 
-        /// <summary>
-        /// Название арендатора.
-        /// </summary>
-        public string Name { get; private set; }
+    /// <summary>
+    /// Название арендатора.
+    /// </summary>
+    public string Name { get; private set; }
 
-        protected override IEnumerable<object> GetAtomicValues()
-        {
-            yield return Name;
-        }
+    protected override IEnumerable<object> GetAtomicValues()
+    {
+        yield return Name;
     }
 }

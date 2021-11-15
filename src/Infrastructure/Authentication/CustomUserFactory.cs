@@ -1,56 +1,49 @@
 ﻿using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication.Internal;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
 using System.Security.Claims;
-using System.Text.Json;
-using System.Threading.Tasks;
-using YA.WebClient.Application.Models.Internal;
 
-namespace YA.WebClient.Infrastructure.Authentication
+namespace YA.WebClient.Infrastructure.Authentication;
+
+public class CustomUserFactory : AccountClaimsPrincipalFactory<CustomUserAccount>
 {
-    public class CustomUserFactory : AccountClaimsPrincipalFactory<CustomUserAccount>
+    public CustomUserFactory(IAccessTokenProviderAccessor accessor) : base(accessor)
     {
-        public CustomUserFactory(IAccessTokenProviderAccessor accessor) : base(accessor)
-        {
-            _tokenProviderAccessor = accessor;
-        }
+        _tokenProviderAccessor = accessor;
+    }
 
-        private readonly IAccessTokenProviderAccessor _tokenProviderAccessor;
-        
-        public override async ValueTask<ClaimsPrincipal> CreateUserAsync(CustomUserAccount account, RemoteAuthenticationUserOptions options)
-        {
-            ClaimsPrincipal user = await base.CreateUserAsync(account, options);
+    private readonly IAccessTokenProviderAccessor _tokenProviderAccessor;
 
-            ////if (user.Identity.IsAuthenticated)
-            ////{
-            ////    ClaimsIdentity identity = (ClaimsIdentity)user.Identity;
+    public override async ValueTask<ClaimsPrincipal> CreateUserAsync(CustomUserAccount account, RemoteAuthenticationUserOptions options)
+    {
+        ClaimsPrincipal user = await base.CreateUserAsync(account, options);
 
-            ////    AccessTokenResult tokenResult = await _tokenProviderAccessor.TokenProvider.RequestAccessToken();
+        ////if (user.Identity.IsAuthenticated)
+        ////{
+        ////    ClaimsIdentity identity = (ClaimsIdentity)user.Identity;
 
-            ////    if (tokenResult.TryGetToken(out AccessToken token))
-            ////    {
-            ////        JwtSecurityTokenHandler handler = new();
-            ////        SecurityToken jsonToken = handler.ReadToken(token.Value);
-            ////        JwtSecurityToken tokenS = jsonToken as JwtSecurityToken;
+        ////    AccessTokenResult tokenResult = await _tokenProviderAccessor.TokenProvider.RequestAccessToken();
 
-            ////        Claim metadataClaim = tokenS.Claims.FirstOrDefault(e => e.Type == "http://yaapp.app_metadata");
+        ////    if (tokenResult.TryGetToken(out AccessToken token))
+        ////    {
+        ////        JwtSecurityTokenHandler handler = new();
+        ////        SecurityToken jsonToken = handler.ReadToken(token.Value);
+        ////        JwtSecurityToken tokenS = jsonToken as JwtSecurityToken;
 
-            ////        if (metadataClaim != null)
-            ////        {
-            ////            AppMetadata appMetadata = JsonSerializer
-            ////                .Deserialize<AppMetadata>(metadataClaim.Value, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        ////        Claim metadataClaim = tokenS.Claims.FirstOrDefault(e => e.Type == "http://yaapp.app_metadata");
 
-            ////            if (!string.IsNullOrEmpty(appMetadata.Tid))
-            ////            {
-            ////                identity.AddClaim(new Claim("tid", appMetadata.Tid));
-            ////            }
-            ////        }
-            ////    }
-            ////}
+        ////        if (metadataClaim != null)
+        ////        {
+        ////            AppMetadata appMetadata = JsonSerializer
+        ////                .Deserialize<AppMetadata>(metadataClaim.Value, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            return user;
-        }
+        ////            if (!string.IsNullOrEmpty(appMetadata.Tid))
+        ////            {
+        ////                identity.AddClaim(new Claim("tid", appMetadata.Tid));
+        ////            }
+        ////        }
+        ////    }
+        ////}
+
+        return user;
     }
 }

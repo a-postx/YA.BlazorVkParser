@@ -1,8 +1,7 @@
-﻿namespace YA.WebClient.Application.Models.Dto
+﻿namespace YA.WebClient.Application.Models.Dto;
+
+public class UaBrowser
 {
-    public class UaBrowser
-    {
-        public string Name { get; set; }
-        public string Version { get; set; }
-    }
+    public string Name { get; set; }
+    public string Version { get; set; }
 }

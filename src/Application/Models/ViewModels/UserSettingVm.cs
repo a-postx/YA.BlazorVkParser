@@ -1,13 +1,12 @@
-﻿namespace YA.WebClient.Application.Models.ViewModels
+﻿namespace YA.WebClient.Application.Models.ViewModels;
+
+/// <summary>
+/// Настройки пользователя, визуальная модель.
+/// </summary>
+public class UserSettingVm
 {
     /// <summary>
-    /// Настройки пользователя, визуальная модель.
+    /// Признак необходимости показа страницы регистрации.
     /// </summary>
-    public class UserSettingVm
-    {
-        /// <summary>
-        /// Признак необходимости показа страницы регистрации.
-        /// </summary>
-        public bool ShowGettingStarted { get; set; }
-    }
+    public bool ShowGettingStarted { get; set; }
 }

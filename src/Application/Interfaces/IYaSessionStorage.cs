@@ -1,15 +1,10 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
+﻿namespace YA.WebClient.Application.Interfaces;
 
-namespace YA.WebClient.Application.Interfaces
+public interface IYaSessionStorage
 {
-    public interface IYaSessionStorage
-    {
-        Task AddOrReplaceTenantInvitationAsync(Guid tenantInvitationId, CancellationToken cancellationToken = default);
-        Task<Guid> GetTenantInvitationAsync(CancellationToken cancellationToken = default);
-        Task RemoveTenantInvitationAsync(CancellationToken cancellationToken = default);
+    Task AddOrReplaceTenantInvitationAsync(Guid tenantInvitationId, CancellationToken cancellationToken = default);
+    Task<Guid> GetTenantInvitationAsync(CancellationToken cancellationToken = default);
+    Task RemoveTenantInvitationAsync(CancellationToken cancellationToken = default);
 
-        Task RemoveCurrentOidcTokensAsync(CancellationToken cancellationToken = default);
-    }
+    Task RemoveCurrentOidcTokensAsync(CancellationToken cancellationToken = default);
 }

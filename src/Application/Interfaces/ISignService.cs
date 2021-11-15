@@ -1,11 +1,7 @@
-﻿using System.Threading;
-using System.Threading.Tasks;
+﻿namespace YA.WebClient.Application.Interfaces;
 
-namespace YA.WebClient.Application.Interfaces
+public interface ISignService
 {
-    public interface ISignService
-    {
-        void BeginLogin(string returnAddress = "");
-        Task BeginLogoutAsync(string returnAddress = "", CancellationToken cancellationToken = default);
-    }
+    void BeginLogin(string returnAddress = "");
+    Task BeginLogoutAsync(string returnAddress = "", CancellationToken cancellationToken = default);
 }
