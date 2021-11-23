@@ -141,10 +141,12 @@
         CloseModal();
     }
 
-    private void OnModalClosing(CancelEventArgs e)
+    private Task OnModalClosing(CancelEventArgs e)
     {
         // just set Cancel to true to prevent modal from closing
         //e.Cancel = true;
+
+        return Task.CompletedTask;
     }
 
     private void CloseModal()
@@ -154,7 +156,7 @@
         _modal.Hide();
     }
 
-    public void ShowWithModel(VkOneTimeParsingTaskVm parsingTaskVm)
+    public async Task ShowWithModel(VkOneTimeParsingTaskVm parsingTaskVm)
     {
         _addVkAdsExportModal.LoadModel(parsingTaskVm);
 
@@ -162,10 +164,10 @@
 
         _modalAlert.Hide();
 
-        _addVkAdsExportTaskModalValidation.ClearAll();
-        _modal.Show();
+        await _addVkAdsExportTaskModalValidation.ClearAll();
+        await _modal.Show();
 
-        bool blazoriseValid = _addVkAdsExportTaskModalValidation.ValidateAll();
+        bool blazoriseValid = await _addVkAdsExportTaskModalValidation.ValidateAll();
         //валидация блейзорайс не всё может проверить, дополняем ручными
         bool customValid = _addVkAdsExportModal.ValidateUpdatedModalOptions();
 
@@ -190,11 +192,11 @@
             _addVkAdsExportModal.AddTasksAsSources(_selectedTasks, true);
         }
 
-        _addVkAdsExportTaskModalValidation.ClearAll();
-        _modal.Show();
+        await _addVkAdsExportTaskModalValidation.ClearAll();
+        await _modal.Show();
 
         await _addVkAdsExportModal.SetExportToVkAdsOnExportTask(true);
-        _addVkAdsExportTaskModalValidation.ValidateAll();
+        await _addVkAdsExportTaskModalValidation.ValidateAll();
         StateHasChanged();
     }
 
@@ -257,7 +259,7 @@
         await _addVkAdsExportModal.OnVkAdsAccountChangedOnExportTaskAsync(value);
         _addVkAdsExportModal.UpdateOptionsVisibility();
 
-        bool validated = _addVkAdsExportTaskModalValidation.ValidateAll();
+        bool validated = await _addVkAdsExportTaskModalValidation.ValidateAll();
 
         if (validated && (_addVkAdsExportModal.VkAdsTargetGroup != null || _addVkAdsExportModal.VkAdsTargetGroupId == -1))
         {
@@ -271,12 +273,12 @@
         StateHasChanged();
     }
 
-    private void OnTargetGroupChanged(long value)
+    private async Task OnTargetGroupChanged(long value)
     {
         _addVkAdsExportModal.OnVkAdsTargetGroupChangedOnExportTask(value);
         _addVkAdsExportModal.UpdateOptionsVisibility();
 
-        bool validated = _addVkAdsExportTaskModalValidation.ValidateAll();
+        bool validated = await _addVkAdsExportTaskModalValidation.ValidateAll();
 
         if (validated)
         {
@@ -299,10 +301,10 @@
         StateHasChanged();
     }
 
-    private void OnNewTargetGroupNameChanged(string value)
+    private async Task OnNewTargetGroupNameChanged(string value)
     {
         _addVkAdsExportModal.OnNewTargetGroupNameChangedOnExportTask(value);
-        bool validated = _addVkAdsExportTaskModalValidation.ValidateAll();
+        bool validated = await _addVkAdsExportTaskModalValidation.ValidateAll();
 
         if (validated)
         {
@@ -320,7 +322,7 @@
 
     private async Task OnAddVkAdsExportTask()
     {
-        bool blazoriseValid = _addVkAdsExportTaskModalValidation.ValidateAll();
+        bool blazoriseValid = await _addVkAdsExportTaskModalValidation.ValidateAll();
         //валидация блейзорайс не всё может проверить, дополняем ручными
         bool customValid = _addVkAdsExportModal.ValidateUpdatedModalOptions();
 

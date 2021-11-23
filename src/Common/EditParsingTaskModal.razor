@@ -772,11 +772,11 @@
         _editTaskModal.UpdateOptionsVisibility();
         _editTaskModal.UpdateTooltipTexts();
 
-        _editParsingTaskModalValidation.ClearAll();
+        await _editParsingTaskModalValidation.ClearAll();
 
         _modalAlert.Hide();
 
-        _modal.Show();
+        await _modal.Show();
 
         Task getCurrentTasks = GetAvailableTasksListAsync(parsingTaskVm);
         Task getCurrentAds = _editTaskModal.GetAvailableVkAdsParams();
@@ -790,7 +790,7 @@
         _editTaskModal.ResetCheckingTimer(200);
     }
 
-    private void OnModalClosing(CancelEventArgs e)
+    private Task OnModalClosing(ModalClosingEventArgs e)
     {
         // just set Cancel to true to prevent modal from closing
         if (_canBeClosed)
@@ -804,6 +804,8 @@
         {
             e.Cancel = true;
         }
+
+        return Task.CompletedTask;
     }
 
     private void OnModalClose()
@@ -1015,7 +1017,7 @@
                 bool customValid = _editTaskModal.ValidateUpdatedModalOptions();
                 //после удаления и возвращения видимости полей возвращается ДА не вызывая никаких проверок
                 //https://github.com/a-postx/YA.WebClient/issues/2
-                bool blazoriseValid = _editParsingTaskModalValidation.ValidateAll();
+                bool blazoriseValid = await _editParsingTaskModalValidation.ValidateAll();
 
                 if (customValid && blazoriseValid)
                 {
@@ -1024,12 +1026,12 @@
             }
             else
             {
-                _editParsingTaskModalValidation.ValidateAll();
+                await _editParsingTaskModalValidation.ValidateAll();
             }
         }
         else
         {
-            _editParsingTaskModalValidation.ValidateAll();
+            await _editParsingTaskModalValidation.ValidateAll();
         }
 
         _submitButtonIsLoading = false;
@@ -1173,7 +1175,7 @@
             case ApiCommandStatus.Ok:
                 _editTaskModal.Reset();
                 _canBeClosed = true;
-                _modal.Hide();
+                await _modal.Hide();
                 _canBeClosed = false;
 
                 await OnTaskSavedCallback.InvokeAsync(result.Data.Title);

@@ -60,8 +60,10 @@
         OnYesAction?.Invoke();
     }
 
-    private void OnModalClosing(CancelEventArgs e)
+    private Task OnModalClosing(CancelEventArgs e)
     {
         IsShowing = false;
+
+        return Task.CompletedTask;
     }
 }

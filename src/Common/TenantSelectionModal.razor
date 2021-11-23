@@ -82,13 +82,15 @@
         }
     }
 
-    private void OnModalClosing(CancelEventArgs e)
+    private Task OnModalClosing(ModalClosingEventArgs e)
     {
         // just set Cancel to true to prevent modal from closing
         if (!_tenantSelected)
         {
             e.Cancel = true;
         }
+
+        return Task.CompletedTask;
     }
 
     private void OnTenantValueChanged(Guid tenantId)

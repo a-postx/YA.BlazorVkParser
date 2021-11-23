@@ -167,10 +167,7 @@ public class VkPeriodicParsingTaskModal : ParsingTaskModal
 
     public override void LoadModel(VkPeriodicParsingTaskVm parsingTask)
     {
-        if (parsingTask == null)
-        {
-            throw new ArgumentNullException(nameof(parsingTask));
-        }
+        ArgumentNullException.ThrowIfNull(parsingTask);
 
         TaskId = parsingTask.YaVkParsingTaskID;
         ExecutionOption = parsingTask.ExecutionOption;

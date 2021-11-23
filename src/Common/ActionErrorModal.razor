@@ -38,7 +38,7 @@
         _modal.Show();
     }
 
-    private void OnModalClosing(CancelEventArgs e)
+    private Task OnModalClosing(ModalClosingEventArgs e)
     {
         if (!closeButtonPressed)
         {
@@ -48,6 +48,8 @@
         {
             closeButtonPressed = false;
         }
+
+        return Task.CompletedTask;
     }
 
     private void OnModalClose()

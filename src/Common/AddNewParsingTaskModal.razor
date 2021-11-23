@@ -755,7 +755,7 @@
 
     private PricingTierVm _currentPricingTier;
 
-    
+
 
     protected override void OnInitialized()
     {
@@ -861,7 +861,7 @@
         _addTaskModal.ResetCheckingTimer(200);
     }
 
-    private void OnModalClosing(CancelEventArgs e)
+    private Task OnModalClosing(ModalClosingEventArgs e)
     {
         // just set Cancel to true to prevent modal from closing
         if (_canBeClosed)
@@ -876,6 +876,8 @@
         {
             e.Cancel = true;
         }
+
+        return Task.CompletedTask;
     }
 
     private void OnModalClose()
@@ -1066,7 +1068,7 @@
                 bool customValid = _addTaskModal.ValidateUpdatedModalOptions();
                 //после удаления и возвращения видимости полей возвращается ДА не вызывая никаких проверок
                 //https://github.com/a-postx/YA.WebClient/issues/2
-                bool blazoriseValid = _addParsingTaskModalValidation.ValidateAll();
+                bool blazoriseValid = await _addParsingTaskModalValidation.ValidateAll();
 
                 //хачим: после удаления и возвращения видимости полей возвращается НЕТ даже если валидация запускалась и прошла успешно
                 if (_addTaskModal.SkipBlazoriseValidation)
@@ -1087,12 +1089,12 @@
             else
             {
                 _addTaskModal.OptionsEnabled = false;
-                _addParsingTaskModalValidation.ValidateAll();
+                await _addParsingTaskModalValidation.ValidateAll();
             }
         }
         else
         {
-            _addParsingTaskModalValidation.ValidateAll();
+            await _addParsingTaskModalValidation.ValidateAll();
         }
 
         _submitButtonIsLoading = false;
@@ -1275,7 +1277,7 @@
             case ApiCommandStatus.Ok:
                 _addTaskModal.Reset();
                 _canBeClosed = true;
-                _modal.Hide();
+                await _modal.Hide();
                 _canBeClosed = false;
                 await OnTaskCreatedCallback.InvokeAsync(result.Data.Title);
                 break;

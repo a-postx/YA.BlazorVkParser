@@ -151,7 +151,7 @@
                             <Text Class="text-muted">Посмотрите детали тарификации и измените ваш тарифный план.</Text>
                         </Field>
                         <Table Borderless="true" FullWidth="true" @bind-Class="@ThemeOptions.TableClass">
-                            <TableBody Float="Float.Left">
+                            <TableBody Float="Float.Start">
                                 <TableRow Padding="Padding.Is0">
                                     <TableRowHeader>Текущий тариф</TableRowHeader>
                                     <TableRowCell>@_tenant?.PricingTier?.Title</TableRowCell>
@@ -369,7 +369,7 @@ else
         }
         else
         {
-            _userValidation.ValidateAll();
+            await _userValidation.ValidateAll();
         }
 
         StateHasChanged();
@@ -404,7 +404,7 @@ else
         }
         else
         {
-            _tenantValidation.ValidateAll();
+            await _tenantValidation.ValidateAll();
         }
 
         StateHasChanged();

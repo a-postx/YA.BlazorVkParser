@@ -655,7 +655,7 @@
         switch (result.Status)
         {
             case ApiCommandStatus.Ok:
-                _addNewVkAdsExportTaskModal.ShowWithModel(result.Data);
+                await _addNewVkAdsExportTaskModal.ShowWithModel(result.Data);
                 await _addNewVkAdsExportTaskModal.GetFreshVkAdsOptions();
                 break;
 
